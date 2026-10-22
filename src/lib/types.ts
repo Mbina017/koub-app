@@ -5,6 +5,9 @@ export type Lang = 'ar' | 'en';
 export type Tag = { label: string; tone: Tone };
 export type Point = { x: string; y: number; orders?: number };
 export type NextState = 'out_delivery' | 'ready_pickup';
+// Order screen actions (API 1.1). Labels and confirmation text come from the dashboard.
+export type ActionKey = NextState | 'release_preorder' | 'cod_collected' | 'cancel';
+export type OrderAction = { key: ActionKey; label: string; confirm: string; tone: 'primary' | 'danger' };
 
 export type Me = {
   api: string;
@@ -114,6 +117,8 @@ export type Order = {
   next: NextState[];
   cod_due: boolean;
   no_action: string | null;
+  // Missing on a store that still runs API 1.0.
+  actions?: OrderAction[];
 };
 
 export type NumbersPeriod = 'today' | 'yesterday' | '7days' | 'month' | 'custom';

@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { Home, Me, Numbers, Order, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
+import type { ActionKey, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -28,7 +28,8 @@ function ago(hours: number): string {
   return 'قبل ' + Math.floor(hours / 24) + ' أيام';
 }
 
-type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][] };
+// Steps taken in demo mode change the invented orders for this session only.
+type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[] };
 const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
   const lines: [number, number][] = k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
   const total = Math.round((lines.reduce((s, [p, q]) => s + catalog[p][1] * q, 0) + (kind === 'pickup' ? 0 : kind === 'prepare_gcc' ? 4 : 1.5)) * 1000) / 1000;
@@ -47,15 +48,16 @@ const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
 });
 
 const inView = (o: DemoOrder, view: string, prepare: string) => {
-  const active = ['prepare_bh', 'prepare_gcc', 'pickup'].includes(o.kind) || (o.kind === 'cod' && o.next !== null);
   if (view === 'all') return true;
-  if (view === 'active') return active && (prepare === 'all' || (prepare === 'bahrain' && (o.kind === 'prepare_bh' || o.kind === 'cod')) || (prepare === 'international' && o.kind === 'prepare_gcc') || (prepare === 'pickup' && o.kind === 'pickup'));
-  if (view === 'preorder') return o.kind === 'preorder';
-  if (view === 'cod') return o.kind === 'cod';
+  if (o.cancelled) return false;
+  const active = o.next !== null;
+  if (view === 'active') return active && (prepare === 'all' || (prepare === 'bahrain' && (o.kind === 'prepare_bh' || o.kind === 'cod' || o.kind === 'preorder')) || (prepare === 'international' && o.kind === 'prepare_gcc') || (prepare === 'pickup' && o.kind === 'pickup'));
+  if (view === 'preorder') return o.kind === 'preorder' && !o.released;
+  if (view === 'cod') return o.kind === 'cod' && !o.collected;
   if (view === 'gifts') return o.kind === 'gift';
   return false;
 };
-const strip = ({ kind, lines, ...o }: DemoOrder): OrderSummary => o;
+const strip = ({ kind, lines, fulfilled, collected, cancelled, released, notes, ...o }: DemoOrder): OrderSummary => o;
 
 function counts(): Record<string, number> {
   const c: Record<string, number> = {};
@@ -142,28 +144,64 @@ function order(id: number): Order {
   const gateway = o.kind === 'cod' ? 0 : Math.round(o.total * 0.0223 * 1000) / 1000;
   const courier = o.kind === 'pickup' ? 0 : 0.9;
   const known = (missingGoods ? 0 : goods) + 0.22 + gateway + courier;
-  const done = o.kind === 'done';
+  const done = o.kind === 'done' || !!o.fulfilled;
+  const status = o.cancelled ? 'cancelled' : done ? 'completed' : 'processing';
   return {
-    id: o.id, number: o.number, status: done ? 'completed' : 'processing', status_label: done ? 'Completed' : 'Processing', created: o.created, ago: o.ago, via_staff: false, test: false,
-    pickup: o.kind === 'pickup', cod: o.kind === 'cod', preorder: o.kind === 'preorder', fulfilment: done ? 'out_delivery' : null, fulfilment_at: done ? o.created : null, tags: o.tags,
+    id: o.id, number: o.number, status, status_label: o.cancelled ? 'ملغي' : done ? 'Completed' : 'Processing', created: o.created, ago: o.ago, via_staff: false, test: false,
+    pickup: o.kind === 'pickup', cod: o.kind === 'cod', preorder: o.kind === 'preorder' && !o.released, fulfilment: done ? 'out_delivery' : null, fulfilment_at: done ? o.created : null, tags: o.tags,
     customer: { name: o.name, initial: o.name.slice(0, 1), phone: '+973 3••• ••' + String(10 + (o.id % 89)), whatsapp: null, call: null, orders: (o.id % 3) + 1, position: (o.id % 3) + 1, spent: Math.round(o.total * ((o.id % 3) + 1) * 1000) / 1000 },
     address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : 'بيت 12 · طريق 3401 · مجمع 334 · المنامة', country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
     gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
     note: o.id % 5 === 0 ? 'لو سمحت التوصيل بعد الساعة 6' : '',
     items,
     totals: { discount: 0, fees: [], shipping, refunded: 0, total: o.total },
-    payment: o.kind === 'cod' ? { label: 'كاش عند التوصيل · ما انحصل للحين', tone: 'amber', method: 'الدفع عند الاستلام' } : { label: 'مدفوع · بطاقة', tone: 'green', method: 'بطاقة' },
+    payment: o.cancelled ? { label: 'ملغي', tone: 'red', method: '' } : o.kind === 'cod' && o.collected ? { label: 'الكاش انحصل', tone: 'green', method: 'الدفع عند الاستلام' } : o.kind === 'cod' ? { label: 'كاش عند التوصيل · ما انحصل للحين', tone: 'amber', method: 'الدفع عند الاستلام' } : { label: 'مدفوع · بطاقة', tone: 'green', method: 'بطاقة' },
     profit: { revenue: o.total, profit: Math.round((o.total - known) * 1000) / 1000, at_most: missingGoods, costs: { goods: { value: missingGoods ? null : goods, estimate: false }, packaging: { value: 0.22, estimate: false }, gateway: { value: gateway, estimate: o.kind !== 'cod' }, courier: { value: courier, estimate: o.kind !== 'pickup' } }, missing_products: missingGoods ? ['كوب السيف'] : [] },
     messages: [
       { event: 'confirmed', label: '«تم تأكيد طلبك»', status: 'وصلت وانقرت', tone: 'green', at: o.created },
       ...(done ? [{ event: 'out_delivery', label: '«طلبك بالطريق»', status: 'وصلت', tone: 'green' as const, at: o.created }] : []),
       ...(o.id === 1036 ? [{ event: 'gift', label: 'دعوة المستلم يضيف عنوانه', status: 'ما وصلت', tone: 'red' as const, at: o.created }] : []),
     ],
-    log: [{ at: o.created, to_customer: false, text: 'Payment verified with Tap. Order moved to processing.' }],
+    log: [...(o.notes ?? []).map((text) => ({ at: null, to_customer: false, text })).reverse(), { at: o.created, to_customer: false, text: 'Payment verified with Tap. Order moved to processing.' }],
     next: o.next ? [o.next] : [],
-    cod_due: o.kind === 'cod',
-    no_action: o.next ? null : done ? 'خلص. طلع للتوصيل.' : o.kind === 'gift' ? 'ينتظر عنوان مستلم الهدية.' : o.kind === 'preorder' ? 'ينتظر منتج الطلب المسبق.' : null,
+    cod_due: o.kind === 'cod' && !o.collected && !o.cancelled,
+    no_action: o.next ? null : o.cancelled ? 'ما في خطوات ثانية لهالطلب.' : done ? 'خلص. طلع للتوصيل.' : o.kind === 'gift' ? 'ينتظر عنوان مستلم الهدية.' : o.kind === 'preorder' ? 'ينتظر منتج الطلب المسبق.' : null,
+    actions: actions(o),
   };
+}
+
+// The same choices the store offers (see koub_app_order_actions), with its Arabic wording.
+const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب' };
+function actions(o: DemoOrder): OrderAction[] {
+  if (o.cancelled) return [];
+  const out: OrderAction[] = [];
+  if (o.next) out.push({ key: o.next, label: labels[o.next], confirm: 'تحدّث طلب #' + o.number + ' إلى «' + labels[o.next] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: 'primary' });
+  if (o.kind === 'preorder' && !o.released) out.push({ key: 'release_preorder', label: labels.release_preorder, confirm: 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.', tone: 'primary' });
+  if (o.kind === 'cod' && !o.collected) out.push({ key: 'cod_collected', label: labels.cod_collected, confirm: 'تأكد إن KOUB استلم كامل مبلغ الكاش من طلب #' + o.number + '؟', tone: 'primary' });
+  const paid = o.kind === 'cod' ? !!o.collected : true;
+  // Open orders, and cash orders already handed over but not yet paid (as the dashboard's order card).
+  const open = o.kind !== 'done' && !o.fulfilled;
+  if (open || (o.kind === 'cod' && !o.collected)) out.push({ key: 'cancel', label: labels.cancel, confirm: paid ? 'تلغي طلب #' + o.number + ' بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب.' : 'تلغي طلب #' + o.number + '؟ ما في مبلغ مدفوع.', tone: 'danger' });
+  return out;
+}
+
+export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
+  await new Promise((r) => setTimeout(r, 500));
+  const [, , id, what] = path.split('/');
+  const o = orders.find((x) => x.id === Number(id));
+  if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
+  o.notes ??= [];
+  if (what === 'note') o.notes.push(String(p.note ?? '').trim().slice(0, 500));
+  else {
+    const key = p.action as ActionKey;
+    if (!actions(o).some((a) => a.key === key)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
+    if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
+    if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
+    if (key === 'cod_collected') o.collected = true;
+    if (key === 'cancel') { o.cancelled = true; o.next = null; }
+    o.notes.push('KOUB: ' + key + ' (demo)');
+  }
+  return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
 }
 
 function products(filter: string, s: string): ProductList {
@@ -180,6 +218,11 @@ function products(filter: string, s: string): ProductList {
 
 // English demo: the same invented store, translated phrase by phrase (longest first).
 const EN: [string | RegExp, string][] = [
+  // Whole confirmation sentences first; the order labels inside them are translated by the entries below.
+  [/^تحدّث طلب #(\d+) إلى «(.+)»؟ العملاء المؤهلين يوصلهم واتساب\.$/, 'Update order #$1 to “$2”? Eligible customers get a WhatsApp update.'],
+  [/^تأكد إن KOUB استلم كامل مبلغ الكاش من طلب #(\d+)؟$/, 'Confirm KOUB received the full cash amount for order #$1?'],
+  [/^تلغي طلب #(\d+) بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب\.$/, 'Cancel order #$1 WITHOUT refunding the payment? Refunds are done from the order screen.'],
+  [/^تلغي طلب #(\d+)؟ ما في مبلغ مدفوع\.$/, 'Cancel order #$1? No payment was taken.'],
   ['كاش عند التوصيل · ما انحصل للحين', 'Cash on delivery · not collected yet'], ['هدية · تنتظر العنوان', 'Gift · address needed'], ['السعودية · شحن', 'Saudi Arabia · Shipping'],
   ['دعوة المستلم يضيف عنوانه', 'Gift address invitation'], ['ينتظر عنوان مستلم الهدية.', 'Waiting for the gift recipient’s address.'], ['ينتظر منتج الطلب المسبق.', 'Waiting for the pre-order product.'],
   ['خلص. طلع للتوصيل.', 'Done. Out for delivery.'], ['لو سمحت التوصيل بعد الساعة 6', 'Please deliver after 6'], ['كل عام وأنتِ بخير', 'Happy birthday'],
@@ -188,6 +231,8 @@ const EN: [string | RegExp, string][] = [
   ['تكلفة المنتج', 'product cost'], ['الدفع عند الاستلام', 'Cash on delivery'], ['كاش عند التوصيل', 'Cash on delivery'], ['مدفوع · بطاقة', 'Paid · Card'],
   ['طقم كوبين · هدية', 'Two-mug gift set'], ['كوب زجاج شفاف', 'Clear glass mug'], ['كوب المنامة', 'Manama mug'], ['كوب المحرق', 'Muharraq mug'], ['كوب الرفاع', 'Riffa mug'],
   ['كوب السيف', 'Seef mug'], ['كوب عراد', 'Arad mug'], ['كوب جدحفص', 'Jidhafs mug'], ['طلع للتوصيل', 'Out for delivery'], ['جاهز للاستلام', 'Ready for pickup'],
+  ['المنتج وصل · حوّله للتحضير', 'Stock arrived · move to prepare'], ['تم تحصيل المبلغ', 'Cash collected'], ['إلغاء الطلب', 'Cancel order'], ['الكاش انحصل', 'Cash collected'],
+  ['ما في خطوات ثانية لهالطلب.', 'No further steps for this order.'], ['كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.', 'Are all items available to prepare? No customer message is sent.'], ['ملغي', 'Cancelled'],
   ['طلب مسبق', 'Pre-order'], ['توصيل', 'Delivery'], ['استلام', 'Pickup'], ['مدفوع', 'Paid'], ['بطاقة', 'Card'], ['وصلت', 'delivered'],
   ['المنامة', 'Manama'], ['المحرق', 'Muharraq'], ['الرفاع', 'Riffa'], ['عيسى', 'Isa Town'], ['البحرين', 'Bahrain'], ['السعودية', 'Saudi Arabia'], ['الكويت', 'Kuwait'],
   ['سارة م.', 'Sara M.'], ['خالد ع.', 'Khalid A.'], ['نورة ي.', 'Noora Y.'], ['أحمد س.', 'Ahmed S.'], ['ريم ح.', 'Reem H.'], ['يوسف ب.', 'Yusuf B.'], ['دانة ف.', 'Dana F.'],
