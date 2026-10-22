@@ -9,6 +9,7 @@ import { useApiSession, useSession } from '../../lib/session';
 import { color, font, radius, space } from '../../lib/theme';
 import type { BulkAction, OrderView, PrepareView } from '../../lib/types';
 import { confirmStep, showMessage } from '../../lib/confirm';
+import { printSlips } from '../../lib/print';
 import { Button, Chips, Empty, ErrorState, Muted, Row, Screen, Segmented, Skeleton, Touch, Txt, tap } from '../../components/ui';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon } from '../../components/Icon';
@@ -28,6 +29,7 @@ export default function Orders() {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<number[]>([]);
   const qc = useQueryClient();
+  const [printing, setPrinting] = useState(false);
 
   // Home tiles open a specific list.
   useEffect(() => { if (params.view && VIEWS.includes(params.view as OrderView)) setView(params.view as OrderView); }, [params.view]);
@@ -105,6 +107,10 @@ export default function Orders() {
   ) : undefined;
   const main = bulk.filter((a) => a.tone === 'primary');
   const cancel = bulk.find((a) => a.tone === 'danger');
+  const print = async () => {
+    setPrinting(true);
+    try { await printSlips(session, picked); } catch (e) { showMessage(t('notPrinted'), (e as Error).message); } finally { setPrinting(false); }
+  };
   const ask = (a: BulkAction) => confirmStep({ ...a, confirm: a.confirm.split('{n}').join(String(picked.length)) }, t('notNow'), () => run.mutate(a));
 
   return (
@@ -137,6 +143,7 @@ export default function Orders() {
             <Button key={a.key} label={picked.length ? a.label + ' · ' + picked.length : t('pickOrders')} kind={i === 0 ? 'primary' : 'light'}
               loading={run.isPending && run.variables?.key === a.key} disabled={!picked.length || run.isPending} onPress={() => ask(a)} />
           ))}
+          {first?.print && <Button label={t('printSlips') + (picked.length ? ' · ' + picked.length : '')} kind="light" icon="print" loading={printing} disabled={!picked.length || run.isPending} onPress={print} />}
           {cancel && picked.length > 0 && (
             <Touch onPress={() => ask(cancel)} disabled={run.isPending} style={{ alignSelf: 'center', paddingVertical: 4, paddingHorizontal: 12 }}>
               <Txt size={14} weight="medium" tint={color.red} center>{cancel.label + ' · ' + picked.length}</Txt>

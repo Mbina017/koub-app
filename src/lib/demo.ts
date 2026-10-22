@@ -225,9 +225,13 @@ function bulk(ids: number[], key: BulkKey): BulkResult {
   }
   return out;
 }
+// A plain demo slip; the real one comes from the store's dashboard template.
+function slipsHtml(ids: number[]): string {
+  const sheets = ids.map((id) => orders.find((o) => o.id === id)).filter(Boolean).map((o) => '<section class="sheet"><h1>KOUB</h1><h2>#' + o!.number + '</h2><p>' + o!.name + '</p><p>' + o!.items + '</p><p><b>' + o!.total.toFixed(3) + ' BHD</b></p><p class="demo">بيانات تجريبية · Demo data</p></section>').join('');
+  return '<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px Arial,sans-serif}.sheet{padding:24px;border-bottom:1px dashed #999;break-after:page}.demo{color:#a60}</style></head><body>' + sheets + '</body></html>';
+}
 function bulkChoices(view: string, prepare: string): BulkAction[] {
   const keys: BulkKey[] = view === 'active' ? (prepare === 'pickup' ? ['ready_pickup'] : prepare === 'all' ? ['out_delivery', 'ready_pickup'] : ['out_delivery']) : view === 'preorder' ? ['release_preorder'] : view === 'cod' ? ['cod_collected'] : view === 'all' ? ['out_delivery', 'ready_pickup', 'release_preorder', 'cod_collected', 'cancel'] : [];
-  if (view !== 'all' && view !== 'gifts') keys.push('cancel');
   return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
 }
 
@@ -307,11 +311,12 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
+  if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {
     const view = String(p.view ?? 'active'), prepare = String(p.prepare ?? 'all'), q = String(p.s ?? '');
     const rows = orders.filter((o) => inView(o, view, prepare) && (!q || o.number.includes(q) || o.name.includes(q)));
-    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip), bulk: bulkChoices(view, prepare) } as T;
+    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip), bulk: bulkChoices(view, prepare), print: view === 'all' || (view === 'active' && prepare !== 'pickup') } as T;
   }
   throw new Error('Unknown demo route ' + path);
 }

@@ -78,6 +78,8 @@ export type OrderList = {
   orders: OrderSummary[];
   // Missing before API 1.2: no select mode then.
   bulk?: BulkAction[];
+  // The dashboard bar offers slips for this list.
+  print?: boolean;
 };
 
 export type CostKey = 'goods' | 'packaging' | 'gateway' | 'courier';
