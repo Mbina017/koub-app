@@ -37,6 +37,8 @@ export type OrderSummary = {
   tags: Tag[];
   next: NextState | null;
   test: boolean;
+  // API 1.2: the steps this order allows now, for select mode.
+  can?: ActionKey[];
 };
 
 export type HomePeriod = 'today' | '7days' | 'month';

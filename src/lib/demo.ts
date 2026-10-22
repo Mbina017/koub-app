@@ -57,7 +57,7 @@ const inView = (o: DemoOrder, view: string, prepare: string) => {
   if (view === 'gifts') return o.kind === 'gift';
   return false;
 };
-const strip = ({ kind, lines, fulfilled, collected, cancelled, released, notes, ...o }: DemoOrder): OrderSummary => o;
+const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
 
 function counts(): Record<string, number> {
   const c: Record<string, number> = {};
@@ -219,7 +219,7 @@ function bulk(ids: number[], key: BulkKey): BulkResult {
   for (const id of [...new Set(ids)].slice(0, 20)) {
     const o = orders.find((x) => x.id === id);
     if (!o) continue;
-    const ok = (key !== 'cod_collected' || handedOver(o)) && apply(o, key);
+    const ok = apply(o, key);
     if (ok) out.updated += 1;
     else out.skipped.push({ id, number: o.number, reason: key === 'cod_collected' && !o.collected && !handedOver(o) ? 'ما تسلّم للحين. أكد الكاش من صفحة الطلب.' : key === 'out_delivery' && o.kind === 'pickup' ? 'طلب استلام، اضغط «جاهز للاستلام».' : 'هالخطوة مو متاحة لهالطلب.' });
   }
@@ -231,7 +231,9 @@ function slipsHtml(ids: number[]): string {
   return '<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px Arial,sans-serif}.sheet{padding:24px;border-bottom:1px dashed #999;break-after:page}.demo{color:#a60}</style></head><body>' + sheets + '</body></html>';
 }
 function bulkChoices(view: string, prepare: string): BulkAction[] {
-  const keys: BulkKey[] = view === 'active' ? (prepare === 'pickup' ? ['ready_pickup'] : prepare === 'all' ? ['out_delivery', 'ready_pickup'] : ['out_delivery']) : view === 'preorder' ? ['release_preorder'] : view === 'cod' ? ['cod_collected'] : view === 'all' ? ['out_delivery', 'ready_pickup', 'release_preorder', 'cod_collected', 'cancel'] : [];
+  // Every step; the app shows the ones the ticked rows allow. Cancel only on All, like the dashboard.
+  const keys: BulkKey[] = ['out_delivery', 'ready_pickup', 'release_preorder', 'cod_collected'];
+  if (view === 'all') keys.push('cancel');
   return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
 }
 

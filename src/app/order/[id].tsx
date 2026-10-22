@@ -14,7 +14,7 @@ import { money, num } from '../../lib/format';
 import type { CostKey, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
 import { confirmStep, showMessage } from '../../lib/confirm';
-import { printSlips } from '../../lib/print';
+import { shareSlips } from '../../lib/print';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 
@@ -31,7 +31,7 @@ export default function OrderScreen() {
   const [printing, setPrinting] = useState(false);
   const print = async () => {
     setPrinting(true);
-    try { await printSlips(session, [Number(id)]); }
+    try { await shareSlips(session, [Number(id)], 'KOUB-' + (o?.number ?? id)); }
     catch (e) { showMessage(t('notPrinted'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : (e as Error).message); }
     finally { setPrinting(false); }
   };

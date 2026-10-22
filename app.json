@@ -50,7 +50,8 @@
           "defaultChannel": "orders"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sharing"
     ],
     "scheme": "koub",
     "backgroundColor": "#F7F3EC",
