@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ import { color, font, radius, space, tone } from '../../lib/theme';
 import { money, num } from '../../lib/format';
 import type { CostKey, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
+import { confirmStep, showMessage } from '../../lib/confirm';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 
@@ -70,15 +71,6 @@ export default function OrderScreen() {
   );
 }
 
-// Ask first, with the store's own wording. Alert buttons don't exist on the web preview, so it uses the browser's confirm.
-function confirmStep(a: OrderAction, back: string, run: () => void) {
-  if (Platform.OS === 'web') { if (window.confirm(a.confirm)) run(); return; }
-  Alert.alert(a.label, a.confirm, [{ text: back, style: 'cancel' }, { text: a.label, style: a.tone === 'danger' ? 'destructive' : 'default', onPress: run }]);
-}
-
-function showError(title: string, message: string) {
-  if (Platform.OS === 'web') window.alert(title + '\n' + message); else Alert.alert(title, message);
-}
 
 // After a change, the order screen, the lists and Home all show the new state.
 function useOrderUpdate(id: number) {
@@ -100,7 +92,7 @@ function Actions({ o }: { o: Order }) {
     onSuccess: (data) => { update(data); if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); },
     onError: (e) => {
       // Refused means the order moved on (another phone, or the dashboard): show why and load its current state.
-      showError(t('notUpdated'), e instanceof ApiError && (e.kind === 'refused' || e.kind === 'server') ? e.message : e instanceof ApiError && e.kind === 'network' ? t('errNetwork') : e.message);
+      showMessage(t('notUpdated'), e instanceof ApiError && (e.kind === 'refused' || e.kind === 'server') ? e.message : e instanceof ApiError && e.kind === 'network' ? t('errNetwork') : e.message);
       qc.invalidateQueries({ queryKey: ['order', String(o.id)] });
     },
   });
@@ -108,9 +100,11 @@ function Actions({ o }: { o: Order }) {
   if (!actions.length) return <Muted size={13} center>{o.no_action ?? t('nothingToDo')}</Muted>;
   const main = actions.filter((a) => a.tone === 'primary');
   const cancel = actions.find((a) => a.tone === 'danger');
+  const undo = actions.filter((a) => a.tone === 'undo');
   const busy = run.isPending ? run.variables?.key : undefined;
   return (
     <View style={{ gap: 8 }}>
+      {main.length === 0 && !!o.no_action && <Muted size={13} center>{o.no_action}</Muted>}
       {main.map((a, i) => (
         <Button key={a.key} label={a.label} kind={i === 0 ? 'primary' : 'light'} icon={a.key === 'out_delivery' ? 'truck' : a.key === 'cod_collected' ? 'cash' : 'check'}
           loading={busy === a.key} disabled={run.isPending} onPress={() => confirmStep(a, t('notNow'), () => run.mutate(a))} />
@@ -119,6 +113,15 @@ function Actions({ o }: { o: Order }) {
         <Touch onPress={() => confirmStep(cancel, t('notNow'), () => run.mutate(cancel))} disabled={run.isPending} style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}>
           <Txt size={14} weight="medium" tint={color.red} center>{busy === 'cancel' ? '…' : cancel.label}</Txt>
         </Touch>
+      )}
+      {undo.length > 0 && (
+        <Row gap={4} style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+          {undo.map((a) => (
+            <Touch key={a.key} onPress={() => confirmStep(a, t('notNow'), () => run.mutate(a))} disabled={run.isPending} style={{ paddingVertical: 6, paddingHorizontal: 10 }}>
+              <Row gap={6}><Icon name="back" size={15} tint={color.muted} /><Txt size={13} weight="medium" tint={color.muted}>{busy === a.key ? '…' : a.label}</Txt></Row>
+            </Touch>
+          ))}
+        </Row>
       )}
     </View>
   );
@@ -133,7 +136,7 @@ function NoteBox({ o }: { o: Order }) {
   const save = useMutation({
     mutationFn: () => api.orderNote(session, o.id, text.trim()),
     onSuccess: (data) => { update(data); setText(''); tap('select'); },
-    onError: (e) => showError(t('notSaved'), e.message),
+    onError: (e) => showMessage(t('notSaved'), e.message),
   });
   return (
     <Row gap={8} style={{ marginTop: space.md }}>
