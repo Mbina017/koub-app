@@ -11,6 +11,7 @@ import { useApiSession, useSession } from '../../lib/session';
 import { color, radius, space, tone } from '../../lib/theme';
 import { money, num } from '../../lib/format';
 import type { CostKey, Order } from '../../lib/types';
+import { orderProgress } from '../../lib/progress';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 
@@ -70,9 +71,7 @@ function Progress({ o }: { o: Order }) {
   const { t } = useSession();
   if (['cancelled', 'refunded', 'failed'].includes(o.status)) return <Banner tint="red" text={o.status_label} />;
   const pending = o.status === 'pending';
-  const finished = o.fulfilment === 'out_delivery' || o.fulfilment === 'ready_pickup';
-  const done = finished ? 3 : pending ? 0 : 1;
-  const current = finished ? 0 : done + 1;
+  const { done, current } = orderProgress(o);
   const steps = [pending ? t('awaitingPayment') : o.cod ? t('orderedCash') : t('orderedPaid'), o.preorder ? t('viewPreorder') : t('preparing'), o.pickup ? t('readyPickup') : t('outForDelivery')];
   return (
     <Card>

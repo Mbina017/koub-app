@@ -12,11 +12,17 @@ const LOCK = 'koub.lock.v1';
 const LANG = 'koub.lang.v1';
 export type LangPref = 'auto' | Lang;
 
-// Web is only used for previews; it keeps nothing after the tab closes.
+// Web is only used for previews and has no secure storage, so a real sign-in there lives in memory
+// and is gone on reload. Only non-secret values (language, lock switch, the demo session) use sessionStorage.
+const memory = new Map<string, string>();
+const webSecret = (k: string, v: string) => k === KEY && !('demo' in (JSON.parse(v) as { session: Session }).session);
 const store = {
-  get: (k: string) => (Platform.OS === 'web' ? Promise.resolve(globalThis.sessionStorage?.getItem(k) ?? null) : SecureStore.getItemAsync(k)),
-  set: (k: string, v: string) => (Platform.OS === 'web' ? Promise.resolve(globalThis.sessionStorage?.setItem(k, v)) : SecureStore.setItemAsync(k, v)),
-  del: (k: string) => (Platform.OS === 'web' ? Promise.resolve(globalThis.sessionStorage?.removeItem(k)) : SecureStore.deleteItemAsync(k)),
+  get: async (k: string) => (Platform.OS !== 'web' ? SecureStore.getItemAsync(k) : memory.get(k) ?? globalThis.sessionStorage?.getItem(k) ?? null),
+  set: async (k: string, v: string) => {
+    if (Platform.OS !== 'web') return SecureStore.setItemAsync(k, v);
+    if (webSecret(k, v)) { memory.set(k, v); globalThis.sessionStorage?.removeItem(k); } else globalThis.sessionStorage?.setItem(k, v);
+  },
+  del: async (k: string) => { if (Platform.OS !== 'web') return SecureStore.deleteItemAsync(k); memory.delete(k); globalThis.sessionStorage?.removeItem(k); },
 };
 
 type Ctx = {

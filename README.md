@@ -12,7 +12,7 @@ Built with Expo (React Native) and Expo Router.
 Screens show invented demo data, in Arabic and English.
 
 ## Phase 1 (this version)
-- Sign in with the store address, username and a WordPress **Application Password**. Credentials stay in the phone's keychain.
+- Sign in with the store address, username and a WordPress **Application Password**. On a phone, credentials stay in the keychain (`expo-secure-store`). The web preview never writes them to browser storage: a real sign-in there lasts until the page reloads.
 - **Home**: net profit (today / week / month) with the cumulative sales line, “needs you” tiles, monthly goal, website visitors, signals and the latest orders. Refreshes every minute.
 - **Orders**: the dashboard's queues (to prepare, pre-order, cash to collect, gift address, all), destination filter, search, infinite scroll.
 - **Order**: progress, customer with WhatsApp / Call / Copy, gift details, items and totals, payment, profit before ads, WhatsApp messages and the order log.

@@ -45,6 +45,6 @@ Docs: https://docs.expo.dev/eas/index.md
 - This app is the phone client for the KOUB store. Its API lives in `Mbina017/koub-site` → `wp-content/plugins/koub-tap/app-api.php` (docs: `docs/app/api.md` there). Any change that needs new data starts with a PR in koub-site.
 - Every change goes through a branch and a PR with a test method. Claude reviews each PR. Changes affecting payments, orders, WhatsApp messages or Meta events need Mohammed's explicit approval before merge.
 - Never put customer names, phone numbers, addresses or other customer data in code, fixtures, screenshots or PRs. Demo data (`src/lib/demo.ts`) must stay invented.
-- Never commit Application Passwords, tokens or keys. The app stores the sign-in only in the device keychain (expo-secure-store).
+- Never commit Application Passwords, tokens or keys. On phones the sign-in lives only in the device keychain (expo-secure-store). The web preview keeps a real sign-in in memory only; never write it to sessionStorage, localStorage or cookies.
 - Arabic first (RTL), English second. Numbers follow `src/lib/format.ts`, which mirrors the dashboard's `koub_ui_num()`.
 - Before a PR: `npm run typecheck` and `npm test`.
