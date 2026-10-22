@@ -1,6 +1,6 @@
 // Building blocks shared by every screen.
 import { useEffect, useRef, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ScrollViewInstance, type PressableProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type PressableProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { color, font, radius, shadow, space, tone as tones, type Tone } from '../lib/theme';
@@ -30,7 +30,7 @@ export const Muted = (p: Parameters<typeof Txt>[0]) => <Txt size={13} tint={colo
 const OUTER = ['position', 'top', 'bottom', 'start', 'end', 'left', 'right', 'zIndex', 'flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'minWidth', 'maxWidth', 'alignSelf', 'margin', 'marginTop', 'marginBottom', 'marginStart', 'marginEnd', 'marginHorizontal', 'marginVertical'] as const;
 export function Touch({ children, style, onPress, haptic = true, disabled, ...rest }: PressableProps & { style?: StyleProp<ViewStyle>; haptic?: boolean; children: ReactNode }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const flat = { ...(StyleSheet.flatten(style) ?? {}) } as Record<string, unknown>;
+  const flat = { ...((StyleSheet.flatten(style) ?? {}) as object) } as Record<string, unknown>;
   const outer: Record<string, unknown> = {};
   for (const k of OUTER) if (k in flat) { outer[k] = flat[k]; delete flat[k]; }
   // The inner box fills the pressable, so tiles in one row share a height.
@@ -87,7 +87,7 @@ export function Segmented<K extends string>({ items, value, onChange, style }: {
 // Horizontal filter chips with counts.
 export function Chips<K extends string>({ items, value, onChange }: { items: { key: K; label: string; count?: number }[]; value: K; onChange: (k: K) => void }) {
   const { lang } = useSession();
-  const ref = useRef<ScrollViewInstance>(null);
+  const ref = useRef<ScrollView>(null);
   const rtl = lang === 'ar';
   // Horizontal scroll views ignore RTL on some platforms, so lay out left-to-right, reverse, and start at the right end.
   return (

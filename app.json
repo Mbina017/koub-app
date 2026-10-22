@@ -49,7 +49,8 @@
           "color": "#2B241D",
           "defaultChannel": "orders"
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "scheme": "koub",
     "backgroundColor": "#F7F3EC",

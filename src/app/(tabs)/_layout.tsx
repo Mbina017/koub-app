@@ -18,7 +18,7 @@ const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products
 ];
 
 // The five-tab bar from the dashboard, with the "to prepare" badge on Orders.
-function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
+function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { t } = useSession();
   const session = useApiSession();
@@ -38,8 +38,8 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
             accessibilityState={{ selected: on }}
             accessibilityLabel={t(tab.label)}
             onPress={() => {
-              const e = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-              if (!on && !e.defaultPrevented) { tap('select'); navigateToTab(route.key); }
+              const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+              if (!on && !e.defaultPrevented) { tap('select'); navigation.navigate(route.name, route.params); }
             }}
             style={st.item}
           >
