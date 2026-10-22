@@ -14,6 +14,7 @@ import { money, num } from '../../lib/format';
 import type { CostKey, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
 import { confirmStep, showMessage } from '../../lib/confirm';
+import { printSlips } from '../../lib/print';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 
@@ -27,6 +28,13 @@ export default function OrderScreen() {
   const dash = dashboardOrderUrl(session, Number(id));
   // The sticky bar grows with the number of actions; the page scrolls past whatever height it has.
   const [barH, setBarH] = useState(120);
+  const [printing, setPrinting] = useState(false);
+  const print = async () => {
+    setPrinting(true);
+    try { await printSlips(session, [Number(id)]); }
+    catch (e) { showMessage(t('notPrinted'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : (e as Error).message); }
+    finally { setPrinting(false); }
+  };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: color.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -38,6 +46,11 @@ export default function OrderScreen() {
           <Txt size={19} weight="bold">{t('order', { n: o?.number ?? id })}</Txt>
           {o && <Muted size={12}>{o.ago}</Muted>}
         </View>
+        {o?.actions && (
+          <Touch onPress={print} disabled={printing} style={st.iconBtn} accessibilityLabel={t('printSlip')}>
+            <Icon name="print" size={22} tint={printing ? color.faint : color.ink} />
+          </Touch>
+        )}
       </Row>
       {q.isError && !o ? <ErrorState onRetry={q.refetch} /> : !o ? (
         <View style={{ padding: space.lg, gap: space.md }}>{[70, 180, 160, 140].map((h, i) => <Skeleton key={i} h={h} r={radius.lg} />)}</View>
