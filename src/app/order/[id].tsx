@@ -226,7 +226,7 @@ function Profit({ o }: { o: Order }) {
           {p.costs[k].value === null ? <TagChip label={t('missing')} tone="amber" small /> : <Txt size={14} weight="medium" ltr>{'−' + num(p.costs[k].value!)}</Txt>}
         </Row>
       ))}
-      {p.missing_products.length > 0 && <Muted size={12} style={{ marginTop: 6 }}>{p.missing_products.join('، ')}</Muted>}
+      {p.missing_products.length > 0 && <Muted size={12} style={{ marginTop: 6 }}>{p.missing_products.join(lang === 'ar' ? '، ' : ', ')}</Muted>}
       <Muted size={12} style={{ marginTop: 6 }}>{t('beforeAds')}</Muted>
     </Card>
   );

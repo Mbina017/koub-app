@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { Home, HomePeriod, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
+import type { Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
 import { demo } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -33,7 +33,12 @@ function query(params: Record<string, string | number | undefined>): string {
   return q.length ? '?' + q.join('&') : '';
 }
 
+// The app's own language choice; unset means the dashboard setting. /me always reports the dashboard setting.
+let appLang: Lang | undefined;
+export function setApiLang(lang: Lang | undefined) { appLang = lang; }
+
 async function get<T>(session: Session, path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+  if (path !== '/me') params = { ...params, lang: appLang };
   if ('demo' in session) return demo<T>(path, params);
   let res: Response;
   try {

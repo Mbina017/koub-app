@@ -27,7 +27,7 @@ export const Muted = (p: Parameters<typeof Txt>[0]) => <Txt size={13} tint={colo
 
 // Press feedback like native apps: a quick shrink, plus a light tap on phones.
 // Size and placement keys belong to the pressable box, so flex and % widths work like on a plain View.
-const OUTER = ['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'minWidth', 'maxWidth', 'alignSelf', 'margin', 'marginTop', 'marginBottom', 'marginStart', 'marginEnd', 'marginHorizontal', 'marginVertical'] as const;
+const OUTER = ['position', 'top', 'bottom', 'start', 'end', 'left', 'right', 'zIndex', 'flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'minWidth', 'maxWidth', 'alignSelf', 'margin', 'marginTop', 'marginBottom', 'marginStart', 'marginEnd', 'marginHorizontal', 'marginVertical'] as const;
 export function Touch({ children, style, onPress, haptic = true, disabled, ...rest }: PressableProps & { style?: StyleProp<ViewStyle>; haptic?: boolean; children: ReactNode }) {
   const scale = useRef(new Animated.Value(1)).current;
   const flat = { ...(StyleSheet.flatten(style) ?? {}) } as Record<string, unknown>;

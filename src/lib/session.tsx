@@ -3,12 +3,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { api, type Credentials, type Session } from './api';
+import { api, setApiLang, type Credentials, type Session } from './api';
 import { translator, type T } from './i18n';
 import type { Lang, Me } from './types';
 
 const KEY = 'koub.session.v1';
 const LOCK = 'koub.lock.v1';
+const LANG = 'koub.lang.v1';
+export type LangPref = 'auto' | Lang;
 
 // Web is only used for previews; it keeps nothing after the tab closes.
 const store = {
@@ -24,6 +26,8 @@ type Ctx = {
   lang: Lang;
   t: T;
   lock: boolean;
+  langPref: LangPref;
+  setLangPref: (p: LangPref) => Promise<void>;
   signIn: (c: Credentials) => Promise<void>;
   signInDemo: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -36,12 +40,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [lock, setLockState] = useState(false);
+  const [langPref, setPref] = useState<LangPref>('auto');
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await store.get(KEY);
         setLockState((await store.get(LOCK)) === '1');
+        const pref = await store.get(LANG);
+        if (pref === 'ar' || pref === 'en') { setPref(pref); setApiLang(pref); }
         if (raw) {
           const saved = JSON.parse(raw) as { session: Session; me: Me };
           setSession(saved.session);
@@ -63,15 +70,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Ctx>(() => {
-    const lang: Lang = me?.lang ?? 'ar';
+    const lang: Lang = langPref === 'auto' ? me?.lang ?? 'ar' : langPref;
     return {
-      ready, session, me, lang, t: translator(lang), lock,
+      ready, session, me, lang, t: translator(lang), lock, langPref,
+      // The caller refetches its data so labels from the store switch too.
+      setLangPref: async (p) => { await store.set(LANG, p); setApiLang(p === 'auto' ? undefined : p); setPref(p); },
       signIn: (c) => begin(c),
       signInDemo: () => begin({ demo: true }),
       signOut: async () => { await store.del(KEY); setSession(null); setMe(null); },
       setLock: async (on) => { await store.set(LOCK, on ? '1' : '0'); setLockState(on); },
     };
-  }, [ready, session, me, lock, begin]);
+  }, [ready, session, me, lock, langPref, begin]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

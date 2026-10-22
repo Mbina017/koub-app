@@ -7,7 +7,9 @@ Built with Expo (React Native) and Expo Router.
 | --- | --- | --- | --- | --- |
 | ![](docs/screens/1-home.png) | ![](docs/screens/2-orders.png) | ![](docs/screens/3-order.png) | ![](docs/screens/4-numbers.png) | ![](docs/screens/5-products.png) |
 
-Screens show invented demo data.
+| ![](docs/screens/en/1-home.png) | ![](docs/screens/en/2-orders.png) | ![](docs/screens/en/3-order.png) | ![](docs/screens/en/4-numbers.png) | ![](docs/screens/en/6-more.png) |
+
+Screens show invented demo data, in Arabic and English.
 
 ## Phase 1 (this version)
 - Sign in with the store address, username and a WordPress **Application Password**. Credentials stay in the phone's keychain.
@@ -16,6 +18,7 @@ Screens show invented demo data.
 - **Order**: progress, customer with WhatsApp / Call / Copy, gift details, items and totals, payment, profit before ads, WhatsApp messages and the order log.
 - **Numbers**: profit, KPIs, sales chart, where the money went, ads return, card and cash, best sellers, countries, order mix, abandoned carts.
 - **Products**: stock buckets, search, price and unit profit, waiting stock alerts.
+- **Language**: Arabic or English inside the app (More, or the button on the sign-in screen), or Auto to follow the dashboard. Store labels switch too.
 - **More**: Face ID / fingerprint lock, sign out.
 - Demo mode (“Try with demo data”) with invented data, no store needed.
 - Pull to refresh, skeleton loading, haptics, refresh when the app returns to the foreground.

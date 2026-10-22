@@ -138,7 +138,7 @@ function Tile({ icon, tint, title, value, sub, onPress }: { icon: IconName; tint
   return (
     <Touch onPress={onPress} style={st.tile}>
       <Row style={{ justifyContent: 'space-between' }}>
-        <Txt size={13} weight="semibold" tint={zero ? color.muted : tone[tint].fg} style={{ flex: 1 }} lines={1}>{title}</Txt>
+        <Txt size={13} weight="semibold" tint={zero ? color.muted : tone[tint].fg} style={{ flex: 1 }} lines={2}>{title}</Txt>
         <View style={[st.tileIcon, { backgroundColor: zero ? color.sunken : tone[tint].bg }]}><Icon name={icon} size={16} tint={zero ? color.muted : tone[tint].fg} /></View>
       </Row>
       <Txt size={30} weight="bold" style={{ letterSpacing: -0.5, marginTop: 2 }} ltr>{value}</Txt>

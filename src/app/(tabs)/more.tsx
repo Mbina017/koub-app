@@ -5,11 +5,12 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../../lib/session';
 import { color, radius, space } from '../../lib/theme';
-import { Card, Muted, Row, Screen, SectionTitle, Touch, Txt } from '../../components/ui';
+import { Card, Muted, Row, Screen, SectionTitle, Segmented, Touch, Txt } from '../../components/ui';
+import type { LangPref } from '../../lib/session';
 import { Icon, type IconName } from '../../components/Icon';
 
 export default function More() {
-  const { t, me, session, lock, setLock, signOut } = useSession();
+  const { t, me, session, lock, setLock, signOut, langPref, setLangPref } = useSession();
   const client = useQueryClient();
   const [canLock, setCanLock] = useState(false);
   useEffect(() => {
@@ -30,12 +31,20 @@ export default function More() {
         </Row>
       </Card>
 
+      <SectionTitle title={t('language')} icon="globe" />
+      <Segmented<LangPref>
+        items={[['ar', t('langAr')], ['en', t('langEn')], ['auto', t('langAuto')]]}
+        value={langPref}
+        // Refetch so tags and statuses from the store come back in the new language too.
+        onChange={async (p) => { await setLangPref(p); client.invalidateQueries(); }}
+      />
+      <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
+
       <SectionTitle title={t('account')} />
       <Card padded={false}>
         {canLock && (
           <Item icon="lock" label={t('faceLock')} sub={t('faceLockHint')} right={<Switch value={lock} onValueChange={setLock} trackColor={{ true: color.ink, false: color.line }} />} />
         )}
-        <Item icon="globe" label={t('language')} sub={t('languageHint')} />
         <Item icon="logout" label={t('signOut')} danger last onPress={async () => { client.clear(); await signOut(); }} />
       </Card>
 

@@ -4,11 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError, normalizeSite } from '../lib/api';
 import { useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
-import { Button, Muted, Txt } from '../components/ui';
+import { Button, Muted, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 
 export default function Login() {
-  const { t, signIn, signInDemo } = useSession();
+  const { t, lang, signIn, signInDemo, setLangPref } = useSession();
   const insets = useSafeAreaInsets();
   const [site, setSite] = useState('koubbh.com');
   const [user, setUser] = useState('');
@@ -33,6 +33,10 @@ export default function Login() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: color.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 32, paddingHorizontal: space.xl, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+        <Touch onPress={() => setLangPref(lang === 'ar' ? 'en' : 'ar')} style={[st.langBtn, { top: insets.top + 12 }]} accessibilityLabel={t('language')}>
+          <Icon name="globe" size={16} />
+          <Txt size={13} weight="semibold">{lang === 'ar' ? 'English' : 'العربية'}</Txt>
+        </Touch>
         <Txt size={52} center style={{ fontFamily: font.brand, letterSpacing: 6, lineHeight: 60 }} ltr>KOUB</Txt>
         <Muted center size={11} style={{ letterSpacing: 2.5, marginBottom: 40 }} ltr>YOUR DAILY WORKSPACE</Muted>
         <Txt size={26} weight="bold">{t('signInTitle')}</Txt>
@@ -84,5 +88,6 @@ function Field({ label, value, onChange, icon, secure, keyboard, onSubmit }: { l
 const st = StyleSheet.create({
   input: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 52, borderRadius: radius.md, backgroundColor: color.surface, borderWidth: 1, borderColor: color.line, paddingHorizontal: 14 },
   text: { flex: 1, minWidth: 0, fontFamily: font.medium, fontSize: 15, color: color.ink, textAlign: 'left', writingDirection: 'ltr', height: 50 },
+  langBtn: { position: 'absolute', end: space.xl, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: color.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, zIndex: 2 },
   error: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: color.redBg, borderRadius: radius.sm, padding: 12, marginBottom: space.md },
 });

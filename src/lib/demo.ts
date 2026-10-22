@@ -178,9 +178,53 @@ function products(filter: string, s: string): ProductList {
   return { filter: filter as ProductList['filter'], total: rows.length, page: 1, pages: 1, counts: c, products: rows };
 }
 
+// English demo: the same invented store, translated phrase by phrase (longest first).
+const EN: [string | RegExp, string][] = [
+  ['كاش عند التوصيل · ما انحصل للحين', 'Cash on delivery · not collected yet'], ['هدية · تنتظر العنوان', 'Gift · address needed'], ['السعودية · شحن', 'Saudi Arabia · Shipping'],
+  ['دعوة المستلم يضيف عنوانه', 'Gift address invitation'], ['ينتظر عنوان مستلم الهدية.', 'Waiting for the gift recipient’s address.'], ['ينتظر منتج الطلب المسبق.', 'Waiting for the pre-order product.'],
+  ['خلص. طلع للتوصيل.', 'Done. Out for delivery.'], ['لو سمحت التوصيل بعد الساعة 6', 'Please deliver after 6'], ['كل عام وأنتِ بخير', 'Happy birthday'],
+  ['بيت 12 · طريق 3401 · مجمع 334 · المنامة', 'House 12 · Road 3401 · Block 334 · Manama'], ['حي النرجس · الرياض', 'Al Narjis · Riyadh'],
+  ['«تم تأكيد طلبك»', '“Order confirmed”'], ['«طلبك بالطريق»', '“Out for delivery”'], ['وصلت وانقرت', 'delivered and read'], ['ما وصلت', 'not delivered'],
+  ['تكلفة المنتج', 'product cost'], ['الدفع عند الاستلام', 'Cash on delivery'], ['كاش عند التوصيل', 'Cash on delivery'], ['مدفوع · بطاقة', 'Paid · Card'],
+  ['طقم كوبين · هدية', 'Two-mug gift set'], ['كوب زجاج شفاف', 'Clear glass mug'], ['كوب المنامة', 'Manama mug'], ['كوب المحرق', 'Muharraq mug'], ['كوب الرفاع', 'Riffa mug'],
+  ['كوب السيف', 'Seef mug'], ['كوب عراد', 'Arad mug'], ['كوب جدحفص', 'Jidhafs mug'], ['طلع للتوصيل', 'Out for delivery'], ['جاهز للاستلام', 'Ready for pickup'],
+  ['طلب مسبق', 'Pre-order'], ['توصيل', 'Delivery'], ['استلام', 'Pickup'], ['مدفوع', 'Paid'], ['بطاقة', 'Card'], ['وصلت', 'delivered'],
+  ['المنامة', 'Manama'], ['المحرق', 'Muharraq'], ['الرفاع', 'Riffa'], ['عيسى', 'Isa Town'], ['البحرين', 'Bahrain'], ['السعودية', 'Saudi Arabia'], ['الكويت', 'Kuwait'],
+  ['سارة م.', 'Sara M.'], ['خالد ع.', 'Khalid A.'], ['نورة ي.', 'Noora Y.'], ['أحمد س.', 'Ahmed S.'], ['ريم ح.', 'Reem H.'], ['يوسف ب.', 'Yusuf B.'], ['دانة ف.', 'Dana F.'],
+  ['عبدالله ر.', 'Abdulla R.'], ['مريم ك.', 'Maryam K.'], ['حمد ج.', 'Hamad J.'], ['فاطمة ن.', 'Fatima N.'], ['علي ط.', 'Ali T.'], ['لولوة', 'Lulwa'], ['مساحة KOUB', 'KOUB workspace'],
+  ['يناير', 'January'], ['فبراير', 'February'], ['مارس', 'March'], ['أبريل', 'April'], ['مايو', 'May'], ['يونيو', 'June'], ['يوليو', 'July'], ['أغسطس', 'August'], ['سبتمبر', 'September'], ['أكتوبر', 'October'], ['نوفمبر', 'November'], ['ديسمبر', 'December'],
+  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '],
+];
+function english<T>(v: T): T {
+  if (typeof v === 'string') {
+    let s: string = v;
+    for (const [from, to] of EN) s = typeof from === 'string' ? s.split(from).join(to) : s.replace(from, to);
+    return s as T;
+  }
+  if (Array.isArray(v)) return v.map(english) as T;
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === 'initial' ? x : english(x)])) as T;
+  return v;
+}
+
 export async function demo<T>(path: string, p: Record<string, string | number | undefined>): Promise<T> {
+  if (p.lang !== 'en') return demoAr<T>(path, p);
+  // Search the English names, so an English query finds English rows.
+  const q = String(p.s ?? '').toLowerCase();
+  const en = english(await demoAr<Record<string, unknown>>(path, { ...p, s: undefined }));
+  if (path === '/me') Object.assign(en, { lang: 'en', dir: 'ltr' });
+  if (path.startsWith('/orders/')) { const c = en.customer as { name: string; initial: string }; c.initial = c.name.slice(0, 1); }
+  for (const key of ['orders', 'products'] as const) {
+    if (q && Array.isArray(en[key])) {
+      const rows = (en[key] as { name: string; number?: string }[]).filter((r) => r.name.toLowerCase().includes(q) || r.number?.includes(q));
+      Object.assign(en, { [key]: rows, total: rows.length });
+    }
+  }
+  return en as T;
+}
+
+async function demoAr<T>(path: string, p: Record<string, string | number | undefined>): Promise<T> {
   await new Promise((r) => setTimeout(r, 350));
-  const me: Me = { api: 'demo', name: 'مساحة KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true };
+  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true };
   if (path === '/me') return me as T;
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
