@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { orderFromNotification, useLastAlertTap } from '../lib/push';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -28,9 +30,32 @@ if (Platform.OS !== 'web') {
   AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'));
 }
 
+// A tapped alert opens its order; any alert refreshes the order lists.
+function useAlerts(signedIn: boolean) {
+  const last = useLastAlertTap();
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    const id = orderFromNotification(last);
+    const key = last?.notification.request.identifier ?? null;
+    // Open each tapped alert once, after sign-in and unlock.
+    if (!signedIn || !id || handled.current === key) return;
+    handled.current = key;
+    router.push({ pathname: '/order/[id]', params: { id: String(id) } });
+  }, [last, signedIn]);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Notifications.addNotificationReceivedListener(() => {
+      client.invalidateQueries({ queryKey: ['home'] });
+      client.invalidateQueries({ queryKey: ['orders'] });
+    });
+    return () => sub.remove();
+  }, []);
+}
+
 function Gate() {
   const { ready, session, lang, lock } = useSession();
   const [unlocked, setUnlocked] = useState(false);
+  useAlerts(!!session && (!lock || unlocked));
   useEffect(() => { if (ready) SplashScreen.hideAsync().catch(() => {}); }, [ready]);
   // Lock again whenever the app goes to the background.
   useEffect(() => {

@@ -4,12 +4,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { api, setApiLang, type Credentials, type Session } from './api';
+import { setPush, type PushResult } from './push';
 import { translator, type T } from './i18n';
 import type { Lang, Me } from './types';
 
 const KEY = 'koub.session.v1';
 const LOCK = 'koub.lock.v1';
 const LANG = 'koub.lang.v1';
+const PUSH = 'koub.push.v1';
+export type PushPrefs = { on: boolean; quiet: boolean };
 export type LangPref = 'auto' | Lang;
 
 // Web is only used for previews and has no secure storage, so a real sign-in there lives in memory
@@ -33,6 +36,8 @@ type Ctx = {
   t: T;
   lock: boolean;
   langPref: LangPref;
+  push: PushPrefs;
+  savePush: (p: PushPrefs) => Promise<PushResult>;
   setLangPref: (p: LangPref) => Promise<void>;
   signIn: (c: Credentials) => Promise<void>;
   signInDemo: () => Promise<void>;
@@ -47,6 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [lock, setLockState] = useState(false);
   const [langPref, setPref] = useState<LangPref>('auto');
+  const [push, setPushState] = useState<PushPrefs>({ on: false, quiet: true });
 
   useEffect(() => {
     (async () => {
@@ -55,6 +61,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setLockState((await store.get(LOCK)) === '1');
         const pref = await store.get(LANG);
         if (pref === 'ar' || pref === 'en') { setPref(pref); setApiLang(pref); }
+        const savedPush = await store.get(PUSH);
+        if (savedPush) setPushState(JSON.parse(savedPush) as PushPrefs);
         if (raw) {
           const saved = JSON.parse(raw) as { session: Session; me: Me };
           setSession(saved.session);
@@ -77,16 +85,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(() => {
     const lang: Lang = langPref === 'auto' ? me?.lang ?? 'ar' : langPref;
+    // Alerts on this phone; the store is told so it sends (or stops sending) new-order alerts here.
+    const savePush = async (p: PushPrefs): Promise<PushResult> => {
+      if (!session) return 'error';
+      const r = await setPush(session, p.on, p.quiet, lang);
+      const next = { on: r === 'on', quiet: p.quiet };
+      if (r === 'on' || r === 'off') { await store.set(PUSH, JSON.stringify(next)); setPushState(next); }
+      return r;
+    };
     return {
+      push, savePush,
       ready, session, me, lang, t: translator(lang), lock, langPref,
       // The caller refetches its data so labels from the store switch too.
-      setLangPref: async (p) => { await store.set(LANG, p); setApiLang(p === 'auto' ? undefined : p); setPref(p); },
+      setLangPref: async (p) => {
+        await store.set(LANG, p); setApiLang(p === 'auto' ? undefined : p); setPref(p);
+        // Alerts follow the app language too.
+        if (session && push.on) setPush(session, true, push.quiet, p === 'auto' ? me?.lang ?? 'ar' : p).catch(() => {});
+      },
       signIn: (c) => begin(c),
       signInDemo: () => begin({ demo: true }),
-      signOut: async () => { await store.del(KEY); setSession(null); setMe(null); },
+      signOut: async () => {
+        // Stop alerts to this phone before forgetting the store.
+        if (session && push.on) await setPush(session, false, push.quiet, lang).catch(() => {});
+        await store.del(KEY); await store.del(PUSH); setPushState({ on: false, quiet: true }); setSession(null); setMe(null);
+      },
       setLock: async (on) => { await store.set(LOCK, on ? '1' : '0'); setLockState(on); },
     };
-  }, [ready, session, me, lock, langPref, begin]);
+  }, [ready, session, me, lock, langPref, push, begin]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
