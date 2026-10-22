@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "KOUB",
+    "slug": "koub",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "bh.koub.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "KOUB uses Face ID to unlock your workspace."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F3EC",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "bh.koub.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F7F3EC",
+          "image": "./assets/icon.png",
+          "imageWidth": 120
+        }
+      ],
+      "expo-image",
+      "expo-web-browser"
+    ],
+    "scheme": "koub",
+    "backgroundColor": "#F7F3EC",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
