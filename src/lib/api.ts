@@ -1,12 +1,12 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
-import { demo } from './demo';
+import type { ActionKey, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
+import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
 export type Session = Credentials | { demo: true };
 
 export class ApiError extends Error {
-  constructor(public kind: 'auth' | 'forbidden' | 'not_found' | 'network' | 'server', message: string = kind, public status = 0) {
+  constructor(public kind: 'auth' | 'forbidden' | 'not_found' | 'network' | 'server' | 'refused', message: string = kind, public status = 0) {
     super(message);
   }
 }
@@ -37,7 +37,8 @@ function query(params: Record<string, string | number | undefined>): string {
 let appLang: Lang | undefined;
 export function setApiLang(lang: Lang | undefined) { appLang = lang; }
 
-async function post<T>(session: Credentials, path: string, body: Record<string, unknown>): Promise<T> {
+async function post<T>(session: Session, path: string, body: Record<string, unknown>): Promise<T> {
+  if ('demo' in session) return demoPost<T>(path, { ...body, lang: appLang });
   let res: Response;
   try {
     res = await fetch(session.site + '/wp-json/koub/v1/app' + path, {
@@ -50,7 +51,12 @@ async function post<T>(session: Credentials, path: string, body: Record<string, 
   }
   if (res.status === 401) throw new ApiError('auth', 'auth', 401);
   if (res.status === 403) throw new ApiError('forbidden', 'forbidden', 403);
-  if (!res.ok) throw new ApiError(res.status === 404 ? ('not_found' as const) : ('server' as const), 'HTTP ' + res.status, res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    // 409: the store refused this step (already done, wrong step, someone else is updating); its message says why.
+    if (res.status === 409) throw new ApiError('refused', err?.message ?? 'HTTP 409', 409);
+    throw new ApiError(res.status === 404 ? 'not_found' : 'server', err?.message ?? 'HTTP ' + res.status, res.status);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -89,9 +95,12 @@ export const api = {
   products: (s: Session, p: { filter: ProductFilter; s?: string; page?: number }) => get<ProductList>(s, '/products', p),
   push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang }) =>
     post<{ enabled: boolean; quiet: boolean | null; devices: number }>(s, '/push', p),
+  // Each returns the updated order.
+  orderAction: (s: Session, id: number, action: ActionKey) => post<Order>(s, '/orders/' + id + '/action', { action, lang: appLang }),
+  orderNote: (s: Session, id: number, note: string) => post<Order>(s, '/orders/' + id + '/note', { note, lang: appLang }),
 };
 
-// The dashboard order screen, for actions the app does not have yet.
+// The dashboard order screen, for stores without the order actions API and for refunds.
 export function dashboardOrderUrl(session: Session, id: number): string | null {
   return 'demo' in session ? null : session.site + '/wp-admin/admin.php?page=koub-order&order_id=' + id;
 }

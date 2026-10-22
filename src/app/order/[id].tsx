@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { Image } from 'expo-image';
-import { api, dashboardOrderUrl } from '../../lib/api';
+import { api, ApiError, dashboardOrderUrl } from '../../lib/api';
 import { useApiSession, useSession } from '../../lib/session';
-import { color, radius, space, tone } from '../../lib/theme';
+import { color, font, radius, space, tone } from '../../lib/theme';
 import { money, num } from '../../lib/format';
-import type { CostKey, Order } from '../../lib/types';
+import type { CostKey, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
@@ -23,9 +24,11 @@ export default function OrderScreen() {
   const q = useQuery({ queryKey: ['order', id], queryFn: () => api.order(session, Number(id)) });
   const o = q.data;
   const dash = dashboardOrderUrl(session, Number(id));
+  // The sticky bar grows with the number of actions; the page scrolls past whatever height it has.
+  const [barH, setBarH] = useState(120);
 
   return (
-    <View style={{ flex: 1, backgroundColor: color.bg }}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: color.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Row style={[st.top, { paddingTop: insets.top + 6 }]}>
         <Touch onPress={() => (router.canGoBack() ? router.back() : router.replace('/orders'))} style={st.iconBtn} accessibilityLabel="back">
           <Icon name="back" size={24} rtl={lang === 'ar'} />
@@ -39,7 +42,7 @@ export default function OrderScreen() {
         <View style={{ padding: space.lg, gap: space.md }}>{[70, 180, 160, 140].map((h, i) => <Skeleton key={i} h={h} r={radius.lg} />)}</View>
       ) : (
         <>
-          <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + 120, gap: space.md }}>
+          <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: barH + space.lg, gap: space.md }} keyboardShouldPersistTaps="handled">
             <FadeIn>
               <View style={{ gap: space.md }}>
                 {o.test && <Banner tint="red" text={t('testOrder')} />}
@@ -52,14 +55,92 @@ export default function OrderScreen() {
               </View>
             </FadeIn>
           </ScrollView>
-          {/* Sticky next step. Phase 1 is read-only: actions stay in the dashboard for now. */}
-          <View style={[st.bar, { paddingBottom: insets.bottom + 10 }]}>
-            <Muted size={12} style={{ marginBottom: 8 }}>{o.no_action ?? t('actionsSoon')}</Muted>
-            {dash && <Button label={t('openInDashboard')} icon="external" kind="primary" onPress={() => WebBrowser.openBrowserAsync(dash)} />}
+          <View style={[st.bar, { paddingBottom: insets.bottom + 10 }]} onLayout={(e) => setBarH(e.nativeEvent.layout.height)}>
+            {o.actions ? <Actions o={o} /> : (
+              // A store still on API 1.0 has no actions: send the step to the dashboard.
+              <>
+                <Muted size={12} style={{ marginBottom: 8 }}>{o.no_action ?? t('actionsOnDashboard')}</Muted>
+                {dash && <Button label={t('openInDashboard')} icon="external" kind="primary" onPress={() => WebBrowser.openBrowserAsync(dash)} />}
+              </>
+            )}
           </View>
         </>
       )}
+    </KeyboardAvoidingView>
+  );
+}
+
+// Ask first, with the store's own wording. Alert buttons don't exist on the web preview, so it uses the browser's confirm.
+function confirmStep(a: OrderAction, back: string, run: () => void) {
+  if (Platform.OS === 'web') { if (window.confirm(a.confirm)) run(); return; }
+  Alert.alert(a.label, a.confirm, [{ text: back, style: 'cancel' }, { text: a.label, style: a.tone === 'danger' ? 'destructive' : 'default', onPress: run }]);
+}
+
+function showError(title: string, message: string) {
+  if (Platform.OS === 'web') window.alert(title + '\n' + message); else Alert.alert(title, message);
+}
+
+// After a change, the order screen, the lists and Home all show the new state.
+function useOrderUpdate(id: number) {
+  const qc = useQueryClient();
+  return (data: Order) => {
+    qc.setQueryData(['order', String(id)], data);
+    qc.invalidateQueries({ queryKey: ['orders'] });
+    qc.invalidateQueries({ queryKey: ['home'] });
+  };
+}
+
+function Actions({ o }: { o: Order }) {
+  const session = useApiSession();
+  const { t } = useSession();
+  const qc = useQueryClient();
+  const update = useOrderUpdate(o.id);
+  const run = useMutation({
+    mutationFn: (a: OrderAction) => api.orderAction(session, o.id, a.key),
+    onSuccess: (data) => { update(data); if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); },
+    onError: (e) => {
+      // Refused means the order moved on (another phone, or the dashboard): show why and load its current state.
+      showError(t('notUpdated'), e instanceof ApiError && (e.kind === 'refused' || e.kind === 'server') ? e.message : e instanceof ApiError && e.kind === 'network' ? t('errNetwork') : e.message);
+      qc.invalidateQueries({ queryKey: ['order', String(o.id)] });
+    },
+  });
+  const actions = o.actions ?? [];
+  if (!actions.length) return <Muted size={13} center>{o.no_action ?? t('nothingToDo')}</Muted>;
+  const main = actions.filter((a) => a.tone === 'primary');
+  const cancel = actions.find((a) => a.tone === 'danger');
+  const busy = run.isPending ? run.variables?.key : undefined;
+  return (
+    <View style={{ gap: 8 }}>
+      {main.map((a, i) => (
+        <Button key={a.key} label={a.label} kind={i === 0 ? 'primary' : 'light'} icon={a.key === 'out_delivery' ? 'truck' : a.key === 'cod_collected' ? 'cash' : 'check'}
+          loading={busy === a.key} disabled={run.isPending} onPress={() => confirmStep(a, t('notNow'), () => run.mutate(a))} />
+      ))}
+      {cancel && (
+        <Touch onPress={() => confirmStep(cancel, t('notNow'), () => run.mutate(cancel))} disabled={run.isPending} style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}>
+          <Txt size={14} weight="medium" tint={color.red} center>{busy === 'cancel' ? '…' : cancel.label}</Txt>
+        </Touch>
+      )}
     </View>
+  );
+}
+
+// A private staff note in the order log; the customer never sees it.
+function NoteBox({ o }: { o: Order }) {
+  const session = useApiSession();
+  const { t, lang } = useSession();
+  const [text, setText] = useState('');
+  const update = useOrderUpdate(o.id);
+  const save = useMutation({
+    mutationFn: () => api.orderNote(session, o.id, text.trim()),
+    onSuccess: (data) => { update(data); setText(''); tap('select'); },
+    onError: (e) => showError(t('notSaved'), e.message),
+  });
+  return (
+    <Row gap={8} style={{ marginTop: space.md }}>
+      <TextInput value={text} onChangeText={setText} placeholder={t('addNote')} placeholderTextColor={color.faint} maxLength={500} multiline
+        style={[st.note, { textAlign: lang === 'ar' ? 'right' : 'left', fontFamily: font.regular }]} />
+      <Button label={t('save')} kind="light" loading={save.isPending} disabled={!text.trim()} onPress={() => save.mutate()} style={{ paddingHorizontal: 16 }} />
+    </Row>
   );
 }
 
@@ -260,6 +341,7 @@ function Messages({ o }: { o: Order }) {
           ))}
         </>
       )}
+      {o.actions && <NoteBox o={o} />}
     </Card>
   );
 }
@@ -279,5 +361,6 @@ const st = StyleSheet.create({
   pay: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.md, padding: space.md, marginTop: space.md },
   stack: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: color.sunken, marginVertical: space.md },
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
+  note: { flex: 1, minHeight: 44, maxHeight: 120, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, backgroundColor: color.surface, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: color.ink },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
 });
