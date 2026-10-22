@@ -9,7 +9,7 @@ import { useApiSession, useSession } from '../../lib/session';
 import { color, font, radius, space } from '../../lib/theme';
 import type { BulkAction, OrderView, PrepareView } from '../../lib/types';
 import { confirmStep, showMessage } from '../../lib/confirm';
-import { printSlips } from '../../lib/print';
+import { shareSlips } from '../../lib/print';
 import { Button, Chips, Empty, ErrorState, Muted, Row, Screen, Segmented, Skeleton, Touch, Txt, tap } from '../../components/ui';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon } from '../../components/Icon';
@@ -52,8 +52,11 @@ export default function Orders() {
   const toggle = (id: number) => { tap('select'); setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 20 ? p : [...p, id])); };
   const all = rows.filter((o) => !o.test).slice(0, 20).map((o) => o.id);
   const allPicked = all.length > 0 && all.every((id) => picked.includes(id));
+  // Only the steps the ticked orders allow, each with how many of them it applies to.
+  const pickedRows = rows.filter((r) => picked.includes(r.id));
+  const fits = (a: BulkAction) => pickedRows.filter((r) => !r.can || r.can.includes(a.key)).map((r) => r.id);
   const run = useMutation({
-    mutationFn: (a: BulkAction) => api.ordersBulk(session, picked, a.key),
+    mutationFn: (a: BulkAction) => api.ordersBulk(session, fits(a), a.key),
     onSuccess: (r) => {
       if (Platform.OS !== 'web') Haptics.notificationAsync(r.skipped.length ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Every order that did not change is listed with the store's reason.
@@ -105,13 +108,13 @@ export default function Orders() {
       <Txt size={15} weight="semibold" tint={color.ink}>{selecting ? t('done') : t('select')}</Txt>
     </Touch>
   ) : undefined;
-  const main = bulk.filter((a) => a.tone === 'primary');
-  const cancel = bulk.find((a) => a.tone === 'danger');
+  const main = bulk.filter((a) => a.tone === 'primary' && fits(a).length > 0);
+  const cancel = bulk.find((a) => a.tone === 'danger' && fits(a).length > 0);
   const print = async () => {
     setPrinting(true);
-    try { await printSlips(session, picked); } catch (e) { showMessage(t('notPrinted'), (e as Error).message); } finally { setPrinting(false); }
+    try { await shareSlips(session, picked, picked.length === 1 ? 'KOUB-' + (rows.find((r) => r.id === picked[0])?.number ?? picked[0]) : 'KOUB-slips-' + picked.length); } catch (e) { showMessage(t('notPrinted'), (e as Error).message); } finally { setPrinting(false); }
   };
-  const ask = (a: BulkAction) => confirmStep({ ...a, confirm: a.confirm.split('{n}').join(String(picked.length)) }, t('notNow'), () => run.mutate(a));
+  const ask = (a: BulkAction) => confirmStep({ ...a, confirm: a.confirm.split('{n}').join(String(fits(a).length)) }, t('notNow'), () => run.mutate(a));
 
   return (
     <Screen title={t('orders')} header={header} right={right} scroll={false}>
@@ -139,14 +142,15 @@ export default function Orders() {
       )}
       {selecting && (
         <View style={[st.bar, { paddingBottom: insets.bottom + 86 }]}>
+          {!picked.length && <Muted size={13} center style={{ paddingVertical: 10 }}>{t('pickOrders')}</Muted>}
           {main.map((a, i) => (
-            <Button key={a.key} label={picked.length ? a.label + ' · ' + picked.length : t('pickOrders')} kind={i === 0 ? 'primary' : 'light'}
-              loading={run.isPending && run.variables?.key === a.key} disabled={!picked.length || run.isPending} onPress={() => ask(a)} />
+            <Button key={a.key} label={a.label + ' · ' + fits(a).length} kind={i === 0 ? 'primary' : 'light'}
+              loading={run.isPending && run.variables?.key === a.key} disabled={run.isPending} onPress={() => ask(a)} />
           ))}
-          {first?.print && <Button label={t('printSlips') + (picked.length ? ' · ' + picked.length : '')} kind="light" icon="print" loading={printing} disabled={!picked.length || run.isPending} onPress={print} />}
+          {first?.print !== undefined && picked.length > 0 && <Button label={t('shareSlips') + ' · ' + picked.length} kind="light" icon="print" loading={printing} disabled={run.isPending} onPress={print} />}
           {cancel && picked.length > 0 && (
             <Touch onPress={() => ask(cancel)} disabled={run.isPending} style={{ alignSelf: 'center', paddingVertical: 4, paddingHorizontal: 12 }}>
-              <Txt size={14} weight="medium" tint={color.red} center>{cancel.label + ' · ' + picked.length}</Txt>
+              <Txt size={14} weight="medium" tint={color.red} center>{cancel.label + ' · ' + fits(cancel).length}</Txt>
             </Touch>
           )}
         </View>
