@@ -10,6 +10,7 @@ import { color, font, radius, space } from '../../lib/theme';
 import type { BulkAction, OrderView, PrepareView } from '../../lib/types';
 import { confirmStep, showMessage } from '../../lib/confirm';
 import { shareSlips } from '../../lib/print';
+import { money } from '../../lib/format';
 import { Button, Chips, Empty, ErrorState, Muted, Row, Screen, Segmented, Skeleton, Touch, Txt, tap } from '../../components/ui';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon } from '../../components/Icon';
@@ -18,7 +19,7 @@ const VIEWS: OrderView[] = ['active', 'preorder', 'cod', 'gifts', 'all'];
 
 export default function Orders() {
   const session = useApiSession();
-  const { t } = useSession();
+  const { t, lang } = useSession();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ view?: string }>();
   const [view, setView] = useState<OrderView>('active');
@@ -114,7 +115,12 @@ export default function Orders() {
     setPrinting(true);
     try { await shareSlips(session, picked, picked.length === 1 ? 'KOUB-' + (rows.find((r) => r.id === picked[0])?.number ?? picked[0]) : 'KOUB-slips-' + picked.length); } catch (e) { showMessage(t('notPrinted'), (e as Error).message); } finally { setPrinting(false); }
   };
-  const ask = (a: BulkAction) => confirmStep({ ...a, confirm: a.confirm.split('{n}').join(String(fits(a).length)) }, t('notNow'), () => run.mutate(a));
+  // Cash: show the total being confirmed, the same amounts the store records (each order's total less refunds).
+  const cashTotal = (a: BulkAction) => pickedRows.filter((r) => fits(a).includes(r.id)).reduce((sum, r) => sum + r.due, 0);
+  const ask = (a: BulkAction) => {
+    const text = a.confirm.split('{n}').join(String(fits(a).length));
+    confirmStep({ ...a, confirm: a.key === 'cod_collected' ? text + '\n\n' + t('cashTotal', { x: money(cashTotal(a), lang) }) : text }, t('notNow'), () => run.mutate(a));
+  };
 
   return (
     <Screen title={t('orders')} header={header} right={right} scroll={false}>
