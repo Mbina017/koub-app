@@ -10,7 +10,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "bh.koub.app",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "KOUB uses Face ID to unlock your workspace."
+        "NSFaceIDUsageDescription": "KOUB uses Face ID to unlock your workspace.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -39,7 +42,14 @@
         }
       ],
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#2B241D",
+          "defaultChannel": "orders"
+        }
+      ]
     ],
     "scheme": "koub",
     "backgroundColor": "#F7F3EC",

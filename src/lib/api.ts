@@ -6,7 +6,7 @@ export type Credentials = { site: string; user: string; password: string };
 export type Session = Credentials | { demo: true };
 
 export class ApiError extends Error {
-  constructor(public kind: 'auth' | 'forbidden' | 'not_found' | 'network' | 'server', message = kind, public status = 0) {
+  constructor(public kind: 'auth' | 'forbidden' | 'not_found' | 'network' | 'server', message: string = kind, public status = 0) {
     super(message);
   }
 }
@@ -36,6 +36,23 @@ function query(params: Record<string, string | number | undefined>): string {
 // The app's own language choice; unset means the dashboard setting. /me always reports the dashboard setting.
 let appLang: Lang | undefined;
 export function setApiLang(lang: Lang | undefined) { appLang = lang; }
+
+async function post<T>(session: Credentials, path: string, body: Record<string, unknown>): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(session.site + '/wp-json/koub/v1/app' + path, {
+      method: 'POST',
+      headers: { Authorization: basic(session.user, session.password), Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError('network');
+  }
+  if (res.status === 401) throw new ApiError('auth', 'auth', 401);
+  if (res.status === 403) throw new ApiError('forbidden', 'forbidden', 403);
+  if (!res.ok) throw new ApiError(res.status === 404 ? ('not_found' as const) : ('server' as const), 'HTTP ' + res.status, res.status);
+  return res.json() as Promise<T>;
+}
 
 async function get<T>(session: Session, path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
   if (path !== '/me') params = { ...params, lang: appLang };
@@ -70,6 +87,8 @@ export const api = {
   order: (s: Session, id: number) => get<Order>(s, '/orders/' + id),
   numbers: (s: Session, p: { period: NumbersPeriod; from?: string; to?: string }) => get<Numbers>(s, '/numbers', p),
   products: (s: Session, p: { filter: ProductFilter; s?: string; page?: number }) => get<ProductList>(s, '/products', p),
+  push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang }) =>
+    post<{ enabled: boolean; quiet: boolean | null; devices: number }>(s, '/push', p),
 };
 
 // The dashboard order screen, for actions the app does not have yet.

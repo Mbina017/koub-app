@@ -10,7 +10,15 @@ import type { LangPref } from '../../lib/session';
 import { Icon, type IconName } from '../../components/Icon';
 
 export default function More() {
-  const { t, me, session, lock, setLock, signOut, langPref, setLangPref } = useSession();
+  const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush } = useSession();
+  const [pushNote, setPushNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const changePush = async (p: typeof push) => {
+    setBusy(true); setPushNote('');
+    const r = await savePush(p);
+    setBusy(false);
+    if (r !== 'on' && r !== 'off') setPushNote(t(('push_' + r) as 'push_denied'));
+  };
   const client = useQueryClient();
   const [canLock, setCanLock] = useState(false);
   useEffect(() => {
@@ -40,6 +48,13 @@ export default function More() {
       />
       <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
 
+      <SectionTitle title={t('alerts')} icon="bell" />
+      <Card padded={false}>
+        <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last={!push.on} />
+        {push.on && <Item icon="lock" label={t('quietNight')} sub={t('quietNightHint')} right={<Switch value={push.quiet} disabled={busy} onValueChange={(quiet) => changePush({ ...push, quiet })} trackColor={{ true: color.ink, false: color.line }} />} last />}
+      </Card>
+      {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+
       <SectionTitle title={t('account')} />
       <Card padded={false}>
         {canLock && (
@@ -50,7 +65,6 @@ export default function More() {
 
       <SectionTitle title={t('comingNext')} />
       <Card padded={false}>
-        <Item icon="bell" label={t('soonPush')} soon />
         <Item icon="truck" label={t('soonActions')} soon />
         <Item icon="edit" label={t('soonEdit')} soon last />
       </Card>

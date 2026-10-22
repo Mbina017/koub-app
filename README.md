@@ -23,7 +23,9 @@ Screens show invented demo data, in Arabic and English.
 - Demo mode (“Try with demo data”) with invented data, no store needed.
 - Pull to refresh, skeleton loading, haptics, refresh when the app returns to the foreground.
 
-Phase 1 is read-only. Order actions, push notifications and product editing come next.
+- **New-order alerts** (More → Alerts): one alert per new paid or cash order with the order number, total and delivery type, no customer details. Tapping it opens the order. Optional silent hours at night. Needs the koub-tap push update (`app-push.php`) and a KOUB build (below), not Expo Go.
+
+Read-only: order actions and product editing come next.
 
 ## Requirements on the store
 The koub-tap update with the app API (`Mbina017/koub-site`, `app-api.php`) must be installed. Until then, sign-in shows “The app API isn't on this store yet”.
@@ -36,8 +38,15 @@ npm run typecheck
 npm test
 ```
 
-## Release (later)
-Store builds use EAS (`npx eas-cli build`), which needs an Apple Developer account (99 USD a year) and a Google Play developer account (25 USD once). Bundle id: `bh.koub.app`.
+## KOUB build (needed for alerts)
+Expo Go cannot receive remote alerts, so alerts need the app's own build, made with EAS (free Expo account):
+```sh
+npx eas-cli login
+npx eas-cli init            # links the project and writes extra.eas.projectId to app.json
+npx eas-cli build -p android --profile preview   # installable APK for staff phones
+npx eas-cli build -p ios --profile preview       # needs an Apple Developer account (99 USD a year)
+```
+Store releases use `--profile production`, then `npx eas-cli submit`. Google Play needs a developer account (25 USD once). Bundle id: `bh.koub.app`.
 
 ## Structure
 ```
