@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -97,6 +97,7 @@ export const api = {
     post<{ enabled: boolean; quiet: boolean | null; devices: number }>(s, '/push', p),
   // Each returns the updated order.
   orderAction: (s: Session, id: number, action: ActionKey) => post<Order>(s, '/orders/' + id + '/action', { action, lang: appLang }),
+  ordersBulk: (s: Session, ids: number[], action: BulkKey) => post<BulkResult>(s, '/orders/bulk', { ids, action, lang: appLang }),
   orderNote: (s: Session, id: number, note: string) => post<Order>(s, '/orders/' + id + '/note', { note, lang: appLang }),
 };
 

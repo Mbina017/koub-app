@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -171,7 +171,8 @@ function order(id: number): Order {
 }
 
 // The same choices the store offers (see koub_app_order_actions), with its Arabic wording.
-const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب' };
+const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب', undo_fulfilment: 'تراجع عن «طلع للتوصيل»', undo_cod: 'تراجع عن «تم تحصيل المبلغ»' };
+const handedOver = (o: DemoOrder) => o.kind === 'done' || !!o.fulfilled;
 function actions(o: DemoOrder): OrderAction[] {
   if (o.cancelled) return [];
   const out: OrderAction[] = [];
@@ -181,27 +182,53 @@ function actions(o: DemoOrder): OrderAction[] {
   const paid = o.kind === 'cod' ? !!o.collected : true;
   // Open orders, and cash orders already handed over but not yet paid (as the dashboard's order card).
   const open = o.kind !== 'done' && !o.fulfilled;
+  if (handedOver(o)) out.push({ key: 'undo_fulfilment', label: o.kind === 'pickup' ? 'تراجع عن «جاهز للاستلام»' : labels.undo_fulfilment, confirm: 'ترجّع طلب #' + o.number + ' للتحضير؟ لو انرسل واتساب للعميل، ما ينسحب.', tone: 'undo' });
+  if (o.kind === 'cod' && o.collected) out.push({ key: 'undo_cod', label: labels.undo_cod, confirm: 'تسجّل إن كاش طلب #' + o.number + ' ما انحصل للحين؟', tone: 'undo' });
   if (open || (o.kind === 'cod' && !o.collected)) out.push({ key: 'cancel', label: labels.cancel, confirm: paid ? 'تلغي طلب #' + o.number + ' بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب.' : 'تلغي طلب #' + o.number + '؟ ما في مبلغ مدفوع.', tone: 'danger' });
   return out;
 }
 
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
+  if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
   const [, , id, what] = path.split('/');
   const o = orders.find((x) => x.id === Number(id));
   if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
   o.notes ??= [];
   if (what === 'note') o.notes.push(String(p.note ?? '').trim().slice(0, 500));
-  else {
-    const key = p.action as ActionKey;
-    if (!actions(o).some((a) => a.key === key)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
-    if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
-    if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
-    if (key === 'cod_collected') o.collected = true;
-    if (key === 'cancel') { o.cancelled = true; o.next = null; }
-    o.notes.push('KOUB: ' + key + ' (demo)');
-  }
+  else if (!apply(o, p.action as ActionKey)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
   return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+}
+
+function apply(o: DemoOrder, key: ActionKey): boolean {
+  if (!actions(o).some((a) => a.key === key)) return false;
+  const done = ['طلع للتوصيل', 'جاهز للاستلام'];
+  if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
+  if (key === 'undo_fulfilment') { o.fulfilled = false; if (o.kind === 'done') o.kind = 'prepare_bh'; o.next = o.kind === 'pickup' ? 'ready_pickup' : 'out_delivery'; o.tags = o.tags.filter((t) => !done.includes(t.label)); }
+  if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
+  if (key === 'cod_collected') o.collected = true;
+  if (key === 'undo_cod') o.collected = false;
+  if (key === 'cancel') { o.cancelled = true; o.next = null; }
+  (o.notes ??= []).push('KOUB: ' + key + ' (demo)');
+  return true;
+}
+
+// The same rules as the store's bulk bar: cash only for orders already handed over; every skip has a reason.
+function bulk(ids: number[], key: BulkKey): BulkResult {
+  const out: BulkResult = { action: key, updated: 0, skipped: [] };
+  for (const id of [...new Set(ids)].slice(0, 20)) {
+    const o = orders.find((x) => x.id === id);
+    if (!o) continue;
+    const ok = (key !== 'cod_collected' || handedOver(o)) && apply(o, key);
+    if (ok) out.updated += 1;
+    else out.skipped.push({ id, number: o.number, reason: key === 'cod_collected' && !o.collected && !handedOver(o) ? 'ما تسلّم للحين. أكد الكاش من صفحة الطلب.' : key === 'out_delivery' && o.kind === 'pickup' ? 'طلب استلام، اضغط «جاهز للاستلام».' : 'هالخطوة مو متاحة لهالطلب.' });
+  }
+  return out;
+}
+function bulkChoices(view: string, prepare: string): BulkAction[] {
+  const keys: BulkKey[] = view === 'active' ? (prepare === 'pickup' ? ['ready_pickup'] : prepare === 'all' ? ['out_delivery', 'ready_pickup'] : ['out_delivery']) : view === 'preorder' ? ['release_preorder'] : view === 'cod' ? ['cod_collected'] : view === 'all' ? ['out_delivery', 'ready_pickup', 'release_preorder', 'cod_collected', 'cancel'] : [];
+  if (view !== 'all' && view !== 'gifts') keys.push('cancel');
+  return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
 }
 
 function products(filter: string, s: string): ProductList {
@@ -223,6 +250,12 @@ const EN: [string | RegExp, string][] = [
   [/^تأكد إن KOUB استلم كامل مبلغ الكاش من طلب #(\d+)؟$/, 'Confirm KOUB received the full cash amount for order #$1?'],
   [/^تلغي طلب #(\d+) بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب\.$/, 'Cancel order #$1 WITHOUT refunding the payment? Refunds are done from the order screen.'],
   [/^تلغي طلب #(\d+)؟ ما في مبلغ مدفوع\.$/, 'Cancel order #$1? No payment was taken.'],
+  [/^ترجّع طلب #(\d+) للتحضير؟ لو انرسل واتساب للعميل، ما ينسحب\.$/, 'Move order #$1 back to To prepare? A WhatsApp update already sent to the customer is not recalled.'],
+  [/^تسجّل إن كاش طلب #(\d+) ما انحصل للحين؟$/, 'Mark the cash for order #$1 as not received yet?'],
+  [/^تحدّث \{n\} طلبات محددة إلى «(.+)»؟ العملاء المؤهلين يوصلهم واتساب\.$/, 'Update {n} selected orders to “$1”? Eligible customers get a WhatsApp update.'],
+  ['تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟', 'Confirm KOUB received the full cash amount for {n} selected orders?'], ['تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟', 'Cancel {n} selected orders WITHOUT refunding the payment?'],
+  ['ما تسلّم للحين. أكد الكاش من صفحة الطلب.', 'not handed over yet. Confirm its cash from the order screen.'], ['هالخطوة مو متاحة لهالطلب.', 'this step isn’t available for this order.'],
+  ['طلب استلام، اضغط «جاهز للاستلام».', 'pickup order. Use “Ready for pickup”.'], ['تراجع عن «', 'Undo “'], ['إلغاء الطلبات', 'Cancel orders'],
   ['كاش عند التوصيل · ما انحصل للحين', 'Cash on delivery · not collected yet'], ['هدية · تنتظر العنوان', 'Gift · address needed'], ['السعودية · شحن', 'Saudi Arabia · Shipping'],
   ['دعوة المستلم يضيف عنوانه', 'Gift address invitation'], ['ينتظر عنوان مستلم الهدية.', 'Waiting for the gift recipient’s address.'], ['ينتظر منتج الطلب المسبق.', 'Waiting for the pre-order product.'],
   ['خلص. طلع للتوصيل.', 'Done. Out for delivery.'], ['لو سمحت التوصيل بعد الساعة 6', 'Please deliver after 6'], ['كل عام وأنتِ بخير', 'Happy birthday'],
@@ -238,7 +271,7 @@ const EN: [string | RegExp, string][] = [
   ['سارة م.', 'Sara M.'], ['خالد ع.', 'Khalid A.'], ['نورة ي.', 'Noora Y.'], ['أحمد س.', 'Ahmed S.'], ['ريم ح.', 'Reem H.'], ['يوسف ب.', 'Yusuf B.'], ['دانة ف.', 'Dana F.'],
   ['عبدالله ر.', 'Abdulla R.'], ['مريم ك.', 'Maryam K.'], ['حمد ج.', 'Hamad J.'], ['فاطمة ن.', 'Fatima N.'], ['علي ط.', 'Ali T.'], ['لولوة', 'Lulwa'], ['مساحة KOUB', 'KOUB workspace'],
   ['يناير', 'January'], ['فبراير', 'February'], ['مارس', 'March'], ['أبريل', 'April'], ['مايو', 'May'], ['يونيو', 'June'], ['يوليو', 'July'], ['أغسطس', 'August'], ['سبتمبر', 'September'], ['أكتوبر', 'October'], ['نوفمبر', 'November'], ['ديسمبر', 'December'],
-  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '],
+  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '], ['»', '”'], ['«', '“'],
 ];
 function english<T>(v: T): T {
   if (typeof v === 'string') {
@@ -278,7 +311,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/orders') {
     const view = String(p.view ?? 'active'), prepare = String(p.prepare ?? 'all'), q = String(p.s ?? '');
     const rows = orders.filter((o) => inView(o, view, prepare) && (!q || o.number.includes(q) || o.name.includes(q)));
-    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip) } as T;
+    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip), bulk: bulkChoices(view, prepare) } as T;
   }
   throw new Error('Unknown demo route ' + path);
 }

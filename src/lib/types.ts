@@ -6,8 +6,13 @@ export type Tag = { label: string; tone: Tone };
 export type Point = { x: string; y: number; orders?: number };
 export type NextState = 'out_delivery' | 'ready_pickup';
 // Order screen actions (API 1.1). Labels and confirmation text come from the dashboard.
-export type ActionKey = NextState | 'release_preorder' | 'cod_collected' | 'cancel';
-export type OrderAction = { key: ActionKey; label: string; confirm: string; tone: 'primary' | 'danger' };
+export type ActionKey = NextState | 'release_preorder' | 'cod_collected' | 'cancel' | 'undo_fulfilment' | 'undo_cod';
+// tone undo (API 1.2): a step pressed by mistake, shown quietly under the main steps.
+export type OrderAction = { key: ActionKey; label: string; confirm: string; tone: 'primary' | 'danger' | 'undo' };
+// Bulk choices for a list; {n} in confirm is the number of selected orders.
+export type BulkKey = Exclude<ActionKey, 'undo_fulfilment' | 'undo_cod'>;
+export type BulkAction = { key: BulkKey; label: string; confirm: string; tone: 'primary' | 'danger' };
+export type BulkResult = { action: BulkKey; updated: number; skipped: { id: number; number: string; reason: string }[] };
 
 export type Me = {
   api: string;
@@ -71,6 +76,8 @@ export type OrderList = {
   pages: number;
   counts: Record<string, number>;
   orders: OrderSummary[];
+  // Missing before API 1.2: no select mode then.
+  bulk?: BulkAction[];
 };
 
 export type CostKey = 'goods' | 'packaging' | 'gateway' | 'courier';
