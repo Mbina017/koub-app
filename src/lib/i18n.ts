@@ -2,6 +2,7 @@
 import type { Lang } from './types';
 
 const ar = {
+  signOutPushFailed: 'ما تم تسجيل الخروج لأن إيقاف تنبيهات الطلبات ما تأكد. تأكد من الإنترنت وجرّب مرة ثانية.',
   home: 'الرئيسية', orders: 'الطلبات', products: 'المنتجات', numbers: 'الأرقام', more: 'المزيد',
   today: 'اليوم', week: 'الأسبوع', month: 'الشهر', yesterday: 'أمس', days7: '7 أيام', dates: 'تاريخ',
   netProfitToday: 'صافي ربح اليوم', netProfitWeek: 'صافي الربح · آخر 7 أيام', netProfitMonth: 'صافي ربح الشهر', netProfit: 'صافي الربح',
@@ -43,6 +44,7 @@ const ar = {
 };
 type Key = keyof typeof ar;
 const en: Record<Key, string> = {
+  signOutPushFailed: 'You are still signed in because we could not confirm that order alerts stopped. Check your connection and try again.',
   home: 'Home', orders: 'Orders', products: 'Products', numbers: 'Numbers', more: 'More',
   today: 'Today', week: 'Week', month: 'Month', yesterday: 'Yesterday', days7: '7 days', dates: 'Dates',
   netProfitToday: "Today's net profit", netProfitWeek: 'Net profit · last 7 days', netProfitMonth: 'Net profit this month', netProfit: 'Net profit',
@@ -101,3 +103,4 @@ export function ordersCount(n: number, lang: Lang): string {
   if (n === 2) return 'طلبين';
   return n + (n <= 10 ? ' طلبات' : ' طلب');
 }
+

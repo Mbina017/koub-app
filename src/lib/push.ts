@@ -4,10 +4,12 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import * as SecureStore from 'expo-secure-store';
 import { api, type Session } from './api';
 import type { Lang } from './types';
 
 export type PushResult = 'on' | 'off' | 'denied' | 'unsupported' | 'no_project' | 'demo' | 'error';
+const TOKEN_KEY = 'koub.push-token.v1';
 
 // Show alerts while the app is open too, like a messaging app.
 if (Platform.OS !== 'web') {
@@ -37,9 +39,13 @@ async function token(): Promise<string | PushResult> {
 export async function setPush(session: Session, on: boolean, quiet: boolean, lang: Lang): Promise<PushResult> {
   if ('demo' in session) return 'demo';
   try {
-    const t = await token();
-    if (t === 'unsupported' || t === 'denied' || t === 'no_project') return on ? t : 'off';
+    // Removing an existing registration must not ask for permission or need a fresh Expo token.
+    const saved = !on && Platform.OS !== 'web' ? await SecureStore.getItemAsync(TOKEN_KEY) : null;
+    const t = saved ?? await token();
+    if (t === 'unsupported' || t === 'denied' || t === 'no_project') return on ? t : Platform.OS === 'web' ? 'off' : 'error';
+    if (Platform.OS !== 'web') await SecureStore.setItemAsync(TOKEN_KEY, t);
     const r = await api.push(session, { token: t, platform: Platform.OS === 'ios' ? 'ios' : 'android', enabled: on, quiet, lang });
+    if (!r.enabled && Platform.OS !== 'web') await SecureStore.deleteItemAsync(TOKEN_KEY);
     return r.enabled ? 'on' : 'off';
   } catch {
     return 'error';
@@ -55,3 +61,4 @@ export function orderFromNotification(r: Notifications.NotificationResponse | nu
   const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown } | undefined;
   return data?.type === 'new_order' && Number.isInteger(data.order_id) ? (data.order_id as number) : null;
 }
+

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Switch, View } from 'react-native';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,7 +13,21 @@ export default function More() {
   const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush } = useSession();
   const [pushNote, setPushNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const leave = async () => {
+    if (signingOut || busy) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      client.clear();
+    } catch {
+      const message = t('signOutPushFailed');
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert(t('signOut'), message);
+    } finally { setSigningOut(false); }
+  };
   const changePush = async (p: typeof push) => {
+    if (busy || signingOut) return;
     setBusy(true); setPushNote('');
     const r = await savePush(p);
     setBusy(false);
@@ -44,7 +58,7 @@ export default function More() {
         items={[['ar', t('langAr')], ['en', t('langEn')], ['auto', t('langAuto')]]}
         value={langPref}
         // Refetch so tags and statuses from the store come back in the new language too.
-        onChange={async (p) => { await setLangPref(p); client.invalidateQueries(); }}
+        onChange={async (p) => { if (busy || signingOut) return; await setLangPref(p); client.invalidateQueries(); }}
       />
       <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
 
@@ -60,7 +74,7 @@ export default function More() {
         {canLock && (
           <Item icon="lock" label={t('faceLock')} sub={t('faceLockHint')} right={<Switch value={lock} onValueChange={setLock} trackColor={{ true: color.ink, false: color.line }} />} />
         )}
-        <Item icon="logout" label={t('signOut')} danger last onPress={async () => { client.clear(); await signOut(); }} />
+        <Item icon="logout" label={signingOut ? '…' : t('signOut')} danger last disabled={signingOut || busy} onPress={leave} />
       </Card>
 
       <SectionTitle title={t('comingNext')} />
@@ -74,7 +88,7 @@ export default function More() {
   );
 }
 
-function Item({ icon, label, sub, right, onPress, danger, soon, last }: { icon: IconName; label: string; sub?: string; right?: React.ReactNode; onPress?: () => void; danger?: boolean; soon?: boolean; last?: boolean }) {
+function Item({ icon, label, sub, right, onPress, danger, soon, last, disabled }: { icon: IconName; label: string; sub?: string; right?: React.ReactNode; onPress?: () => void; danger?: boolean; soon?: boolean; last?: boolean; disabled?: boolean }) {
   const { t } = useSession();
   const body = (
     <Row gap={12} style={[st.item, !last && st.sep]}>
@@ -87,7 +101,7 @@ function Item({ icon, label, sub, right, onPress, danger, soon, last }: { icon: 
       {right}
     </Row>
   );
-  return onPress ? <Touch onPress={onPress}>{body}</Touch> : body;
+  return onPress ? <Touch onPress={onPress} disabled={disabled}>{body}</Touch> : body;
 }
 
 const st = StyleSheet.create({
@@ -97,3 +111,4 @@ const st = StyleSheet.create({
   icon: { width: 36, height: 36, borderRadius: 10, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center' },
   soon: { backgroundColor: color.sunken, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
 });
+

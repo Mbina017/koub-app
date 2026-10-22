@@ -106,7 +106,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signInDemo: () => begin({ demo: true }),
       signOut: async () => {
         // Stop alerts to this phone before forgetting the store.
-        if (session && push.on) await setPush(session, false, push.quiet, lang).catch(() => {});
+        if (session && push.on) {
+          const result = await setPush(session, false, push.quiet, lang);
+          if (result !== 'off') throw new Error(translator(lang)('signOutPushFailed'));
+        }
         await store.del(KEY); await store.del(PUSH); setPushState({ on: false, quiet: true }); setSession(null); setMe(null);
       },
       setLock: async (on) => { await store.set(LOCK, on ? '1' : '0'); setLockState(on); },
@@ -128,3 +131,4 @@ export function useApiSession(): Session {
   if (!session) throw new Error('Signed-out screen asked for the API');
   return session;
 }
+

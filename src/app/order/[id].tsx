@@ -60,9 +60,9 @@ export default function OrderScreen() {
               // A store still on API 1.0 has no actions: send the step to the dashboard.
               <>
                 <Muted size={12} style={{ marginBottom: 8 }}>{o.no_action ?? t('actionsOnDashboard')}</Muted>
-                {dash && <Button label={t('openInDashboard')} icon="external" kind="primary" onPress={() => WebBrowser.openBrowserAsync(dash)} />}
               </>
             )}
+            {dash && <Button label={t('openInDashboard')} icon="external" kind="light" style={{ marginTop: 8 }} onPress={() => WebBrowser.openBrowserAsync(dash)} />}
           </View>
         </>
       )}
@@ -87,6 +87,7 @@ function useOrderUpdate(id: number) {
     qc.setQueryData(['order', String(id)], data);
     qc.invalidateQueries({ queryKey: ['orders'] });
     qc.invalidateQueries({ queryKey: ['home'] });
+    qc.invalidateQueries({ queryKey: ['numbers'] });
   };
 }
 
@@ -364,3 +365,4 @@ const st = StyleSheet.create({
   note: { flex: 1, minHeight: 44, maxHeight: 120, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, backgroundColor: color.surface, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: color.ink },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
 });
+
