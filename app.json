@@ -55,6 +55,18 @@
     "backgroundColor": "#F7F3EC",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "dfe9944f-b82e-47ef-b9da-36e73a10e43f"
+      }
+    },
+    "owner": "koubbh.com",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/dfe9944f-b82e-47ef-b9da-36e73a10e43f"
     }
   }
 }
