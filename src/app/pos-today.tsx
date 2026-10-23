@@ -23,7 +23,7 @@ export default function PosToday() {
   const q = useQuery({ queryKey: ['pos-today'], queryFn: () => api.posToday(session), refetchInterval: 60_000 });
   const cancel = useMutation({
     mutationFn: (id: number) => api.posVoid(session, id),
-    onSuccess: () => { for (const k of ['pos-today', 'pos-catalog', 'pos-books', 'home', 'products']) qc.invalidateQueries({ queryKey: [k] }); },
+    onSuccess: () => { for (const k of ['pos-today', 'pos-catalog', 'pos-books', 'home', 'products', 'numbers', 'orders']) qc.invalidateQueries({ queryKey: [k] }); },
     onError: (e) => showMessage(t('notUpdated'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
   });
   const d = q.data;
