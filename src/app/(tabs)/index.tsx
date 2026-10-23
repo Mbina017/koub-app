@@ -50,7 +50,7 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
     [['bahrain', t('bahrain')], ['international', t('gcc')], ['pickup', t('pickup')], ['unknown', t('noAddress')]] as const
   ).filter(([k]) => n.prepare.by[k]).map(([k, l]) => n.prepare.by[k] + ' ' + l).join(' · ');
   const notes: { tone: keyof typeof tone; text: string; go: () => void }[] = [];
-  if (n.preorder) notes.push({ tone: 'amber', text: t('preorderWaiting', { n: ordersCount(n.preorder, lang) }), go: () => router.push({ pathname: '/orders', params: { view: 'preorder' } }) });
+  if (n.preorder) notes.push({ tone: 'amber', text: t('preorderWaiting', { n: ordersCount(n.preorder, lang) }), go: () => (d.work ? router.push('/preorders') : router.push({ pathname: '/orders', params: { view: 'preorder' } })) });
   if (d.stock.out || d.stock.low) notes.push({ tone: 'amber', text: [d.stock.out ? t('stockOut', { n: d.stock.out }) : '', d.stock.low ? t('stockLow', { n: d.stock.low }) : ''].filter(Boolean).join(' · '), go: () => router.push({ pathname: '/products', params: { filter: d.stock.out ? 'out' : 'low' } }) });
   if (!d.profit.exact) notes.push({ tone: 'muted', text: t('missingCosts'), go: () => router.push('/numbers') });
 
@@ -75,6 +75,8 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
       <View style={st.tiles}>
         <Tile icon="truck" tint="amber" title={t('toPrepare')} value={String(n.prepare.count)} sub={prepBy || t('nothingWaiting')} onPress={() => router.push({ pathname: '/orders', params: { view: 'active' } })} />
         <Tile icon="cash" tint="amber" title={t('cashWithCourier')} value={num(n.cod.amount)} sub={n.cod.count ? t('notCollected', { n: ordersCount(n.cod.count, lang) }) : t('allCollected')} onPress={() => router.push({ pathname: '/orders', params: { view: 'cod' } })} />
+        {d.work && <Tile icon="truck" tint="blue" title={t('outToday')} value={String(d.work.run.count)} sub={d.work.run.cod ? t('collectX', { x: money(d.work.run.cod, lang) }) : d.work.run.total ? t('openRun') : t('noneWaiting')} onPress={() => router.push('/run')} />}
+        {d.work && n.preorder > 0 && <Tile icon="products" tint="amber" title={t('preorderReady')} value={String(d.work.preorder_ready)} sub={t('preorderWaiting', { n: ordersCount(n.preorder, lang) })} onPress={() => router.push('/preorders')} />}
         <Tile icon="gift" tint="blue" title={t('giftNeedsAddress')} value={String(n.gifts.count)} sub={n.gifts.count ? '' : t('noneWaiting')} onPress={() => router.push({ pathname: '/orders', params: { view: 'gifts' } })} />
         <Tile icon="whatsapp" tint="red" title={t('waNotDelivered')} value={String(n.whatsapp.count)} sub={n.whatsapp.order_id ? t('orderNo', { n: n.whatsapp.order_id }) : t('allDelivered')} onPress={() => (n.whatsapp.order_id ? router.push({ pathname: '/order/[id]', params: { id: String(n.whatsapp.order_id) } }) : router.push('/orders'))} />
       </View>

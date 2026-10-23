@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -105,6 +105,9 @@ export const api = {
   preorders: (s: Session) => get<PreorderList>(s, '/preorders'),
   preordersRelease: (s: Session, key: string, ids: number[]) => post<ReleaseResult>(s, '/preorders/release', { key, ids, lang: appLang }),
   productStock: (s: Session, id: number, delta: number, revision: string) => post<StockResult>(s, '/products/' + id + '/stock', { delta, revision, lang: appLang }),
+  // API 1.3: the delivery run and delivery details.
+  run: (s: Session) => get<Run>(s, '/run'),
+  orderContact: (s: Session, id: number, input: ContactInput) => post<Order>(s, '/orders/' + id + '/contact', { ...input, lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.

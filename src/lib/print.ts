@@ -8,6 +8,11 @@ import { api, type Session } from './api';
 
 export async function shareSlips(session: Session, ids: number[], name: string) {
   const { html } = await api.slips(session, ids);
+  await sharePdf(html, name);
+}
+
+// Any page the app prints (the slips, the delivery run): a PDF named for what it is, then the share sheet.
+export async function sharePdf(html: string, name: string) {
   if (Platform.OS === 'web') {
     const w = window.open('', '_blank');
     if (!w) return;
