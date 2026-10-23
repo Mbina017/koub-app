@@ -42,6 +42,8 @@ export default function Pos() {
   const products = q.data?.products ?? [];
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const hasDrinks = products.some((p) => p.group === 'drinks');
+  // The menu was emptied since: back to everything rather than an empty tab.
+  useEffect(() => { if (!hasDrinks && group !== 'all') setGroup('all'); }, [hasDrinks, group]);
   const shown = products.filter((p) => (group === 'all' || p.group === group) && (!search.trim() || (p.name + ' ' + p.sku).toLowerCase().includes(search.trim().toLowerCase())));
   const lines = Object.entries(cart).map(([id, qty]) => ({ p: byId.get(Number(id)), qty })).filter((l): l is { p: PosProduct; qty: number } => !!l.p && l.qty > 0);
   const count = lines.reduce((s, l) => s + l.qty, 0);
@@ -92,7 +94,7 @@ export default function Pos() {
             const out = p.stock !== null && p.stock <= 0;
             return (
               <Touch onPress={() => setQty(p, inCart + 1)} disabled={out} style={[st.tile, inCart > 0 && st.tileOn, out && { opacity: 0.45 }]} accessibilityLabel={p.name}>
-                <View style={[st.thumb, p.group === 'drinks' && !p.image && { height: 56 }]}>{p.image ? <Image source={p.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} /> : <Icon name="products" size={28} tint={color.faint} />}</View>
+                <View style={st.thumb}>{p.image ? <Image source={p.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} /> : <Icon name="products" size={28} tint={color.faint} />}</View>
                 <Txt size={14} weight="semibold" lines={2}>{p.name}</Txt>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Txt size={14} weight="bold">{money(p.price, lang)}</Txt>
