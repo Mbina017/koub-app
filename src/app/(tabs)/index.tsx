@@ -65,7 +65,7 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
     <FadeIn>
       {/* Headline profit */}
       <View style={{ marginTop: space.xl }}>
-        <Muted size={14}>{label + (d.profit.exact ? '' : ' · ' + t('estimate'))}</Muted>
+        <Muted size={14}>{(d.shop ? t('online') + ' · ' : '') + label + (d.profit.exact ? '' : ' · ' + t('estimate'))}</Muted>
         <Row gap={8} align="flex-end" style={{ marginTop: 2 }}>
           <Txt size={52} weight="bold" style={{ lineHeight: 60, letterSpacing: -1.5 }} ltr>{num(d.profit.value)}</Txt>
           <Txt size={18} weight="medium" tint={color.muted} style={{ marginBottom: 10 }}>{currency(lang)}</Txt>
@@ -76,6 +76,19 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
         </Row>
         <View style={{ marginTop: space.lg }}><SalesLine points={d.spark} rtl={lang === 'ar'} /></View>
       </View>
+
+      {/* The shop till's own books: shown beside the online figures, never added to them. */}
+      {d.shop && (
+        <Touch onPress={() => router.push('/pos-books')} style={st.shop}>
+          <Icon name="store" size={20} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt size={15} weight="semibold">{t('books') + (d.shop.exact ? '' : ' · ' + t('estimate'))}</Txt>
+            <Muted size={13}>{t('shopLine', { x: money(d.shop.sales, lang), n: t('booksSalesN', { n: d.shop.count }), e: money(d.shop.expenses, lang) })}</Muted>
+          </View>
+          <Txt size={16} weight="bold" tint={d.shop.profit < 0 ? color.red : color.ink} ltr>{num(d.shop.profit)}</Txt>
+          <Icon name="chevron" size={16} tint={color.faint} rtl={lang === 'ar'} />
+        </Touch>
+      )}
 
       {/* Needs you */}
       <SectionTitle title={t('needsYou')} />
@@ -180,6 +193,7 @@ function HomeSkeleton() {
 }
 
 const st = StyleSheet.create({
+  shop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: space.lg, padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
   till: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: color.ink },
   delta: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
