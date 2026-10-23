@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -83,6 +83,15 @@ export default function Orders() {
         value={view}
         onChange={(v) => { setView(v); setPrepare('all'); }}
       />
+      {view === 'preorder' && !selecting && (
+        <Touch onPress={() => router.navigate('/preorders')} style={st.byItem}>
+          <Row gap={10}>
+            <Icon name="products" size={20} />
+            <Txt size={15} weight="semibold" style={{ flex: 1 }}>{t('preorderBoard')}</Txt>
+            <Icon name="chevron" size={18} tint={color.muted} rtl={lang === 'ar'} />
+          </Row>
+        </Touch>
+      )}
       {view === 'active' && (
         <Segmented
           style={{ marginHorizontal: space.lg }}
@@ -166,6 +175,7 @@ export default function Orders() {
 }
 
 const st = StyleSheet.create({
+  byItem: { marginHorizontal: space.lg, padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, borderRadius: radius.md, backgroundColor: color.sunken, paddingHorizontal: 12 },
   searchInput: { flex: 1, fontFamily: font.regular, fontSize: 15, color: color.ink, height: 44 },
   selBtn: { paddingHorizontal: 4, paddingVertical: 8 },
