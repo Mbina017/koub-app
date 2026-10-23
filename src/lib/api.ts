@@ -94,7 +94,7 @@ export const api = {
   numbers: (s: Session, p: { period: NumbersPeriod; from?: string; to?: string }) => get<Numbers>(s, '/numbers', p),
   products: (s: Session, p: { filter: ProductFilter; s?: string; page?: number }) => get<ProductList>(s, '/products', p),
   push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang; kinds: ('new_order' | 'unpaid' | 'stock')[] }) =>
-    post<{ enabled: boolean; quiet: boolean | null; devices: number }>(s, '/push', p),
+    post<{ enabled: boolean; quiet: boolean | null; kinds?: ('new_order' | 'unpaid' | 'stock')[] | null; devices: number }>(s, '/push', p),
   // Each returns the updated order.
   orderAction: (s: Session, id: number, action: ActionKey) => post<Order>(s, '/orders/' + id + '/action', { action, lang: appLang }),
   // The dashboard's shipping slips as one HTML document (API 1.2), to print from the phone.
