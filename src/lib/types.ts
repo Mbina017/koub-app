@@ -215,7 +215,8 @@ export type PaymentLink = { url: string; text: string; whatsapp: string | null }
 
 // Shop till (API 1.5).
 export type PosMethod = 'cash' | 'card' | 'benefit';
-export type PosProduct = { id: number; name: string; sku: string; price: number; stock: number | null; image: string | null };
+// group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
+export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; sku: string; price: number; stock: number | null; image: string | null };
 export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[] };
 export type PosSaleInput = {
   ref: string;
