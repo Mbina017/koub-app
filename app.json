@@ -38,7 +38,7 @@
         {
           "backgroundColor": "#F7F3EC",
           "image": "./assets/splash.png",
-          "imageWidth": 240
+          "imageWidth": 170
         }
       ],
       "expo-image",
