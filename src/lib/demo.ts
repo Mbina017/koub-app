@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, StockResult, Tag } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -17,7 +17,11 @@ type Kind = 'prepare_bh' | 'prepare_gcc' | 'pickup' | 'gift' | 'cod' | 'preorder
 const plan: [Kind, number][] = [
   ['prepare_bh', 0.2], ['prepare_bh', 0.9], ['pickup', 1.6], ['prepare_gcc', 2.4], ['gift', 3.1], ['cod', 4.0],
   ['preorder', 5.5], ['done', 7], ['done', 9], ['cod', 26], ['done', 30], ['done', 49], ['done', 53], ['done', 75],
+  ['preorder', 11], ['preorder', 20], ['preorder', 34], ['preorder', 52],
 ];
+// Pre-orders wait for كوب السيف (5) or كوب جدحفص (7); one waits for both.
+const preorderLines: [number, number][][] = [[[5, 1]], [[5, 2]], [[5, 1], [7, 1]], [[7, 1]], [[5, 1]]];
+let preorderSeen = 0;
 
 const now = Date.now();
 const H = 3600 * 1000;
@@ -31,7 +35,7 @@ function ago(hours: number): string {
 // Steps taken in demo mode change the invented orders for this session only.
 type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[] };
 const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
-  const lines: [number, number][] = k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
+  const lines: [number, number][] = kind === 'preorder' ? preorderLines[preorderSeen++ % preorderLines.length] : k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
   const total = Math.round((lines.reduce((s, [p, q]) => s + catalog[p][1] * q, 0) + (kind === 'pickup' ? 0 : kind === 'prepare_gcc' ? 4 : 1.5)) * 1000) / 1000;
   const tags: Tag[] = [];
   if (kind === 'gift') tags.push({ label: 'هدية · تنتظر العنوان', tone: 'blue' });
@@ -191,6 +195,8 @@ function actions(o: DemoOrder): OrderAction[] {
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
   const [, , id, what] = path.split('/');
   const o = orders.find((x) => x.id === Number(id));
   if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
@@ -237,10 +243,43 @@ function bulkChoices(view: string, prepare: string): BulkAction[] {
   return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
 }
 
+// Pre-orders by item, the store's rules: an order waiting for one item only can be released from that item.
+const preKeys = (o: DemoOrder) => [...new Set(o.lines.filter(([i]) => i === 5 || i === 7).map(([i]) => 'p' + (100 + i)))];
+function preorderGroups(): PreorderGroup[] {
+  const open = orders.filter((o) => o.kind === 'preorder' && !o.released && !o.cancelled);
+  const keys = [...new Set(open.flatMap(preKeys))];
+  return keys.map((key) => {
+    const i = Number(key.slice(1)) - 100;
+    const mine = open.filter((o) => preKeys(o).includes(key));
+    const ready = mine.filter((o) => preKeys(o).length === 1).map((o) => o.id);
+    const qty = mine.reduce((sum, o) => sum + o.lines.filter(([x]) => x === i).reduce((a, [, q]) => a + q, 0), 0);
+    const oldest = mine.reduce((a, o) => (o.created && (!a || o.created < a) ? o.created : a), null as string | null);
+    return { key, name: catalog[i][0], orders: mine.length, qty, ready: ready.length, ready_ids: ready, mixed: mine.length - ready.length, oldest, ago: mine.find((o) => o.created === oldest)?.ago ?? '', stock: catalog[i][3], product_id: 100 + i, image: null, confirm: 'وصل مخزون ' + catalog[i][0] + '؟ ' + ready.length + ' طلب ينتقل للتحضير. ما ينرسل شي للعملاء.' };
+  }).sort((a, b) => b.orders - a.orders);
+}
+function releasePreorders(key: string, ids: number[]): ReleaseResult {
+  const ready = preorderGroups().find((g) => g.key === key)?.ready_ids ?? [];
+  const out: ReleaseResult = { updated: 0, skipped: [] };
+  for (const id of ids) {
+    const o = orders.find((x) => x.id === id);
+    if (o && ready.includes(id) && apply(o, 'release_preorder')) out.updated += 1;
+    else out.skipped.push({ id, number: String(id), reason: o && !o.released ? 'ينتظر منتج ثاني كمان. جهّزه من صفحة الطلب.' : 'ما عاد ينتظر.' });
+  }
+  return out;
+}
+function stockChange(id: number, delta: number, en: boolean): StockResult {
+  const row = catalog[id - 100];
+  if (!row || row[3] === null) throw new Error(en ? 'Use the product screen for this product.' : 'عدّل هالمنتج من صفحته.');
+  if (row[3] + delta < 0) throw new Error(en ? 'Only ' + row[3] + ' in stock.' : 'المخزون ' + row[3] + ' بس.');
+  row[3] += delta;
+  const stock = row[3];
+  return { qty: stock, revision: 'demo-' + id + '-' + stock, state: stock === 0 ? 'out' : stock <= 2 ? 'low' : 'ok' };
+}
+
 function products(filter: string, s: string): ProductList {
   const all: Product[] = catalog.map(([name, price, cost, stock], i) => {
     const state = i === 5 ? 'ok' : stock === 0 ? 'out' : stock !== null && stock <= 2 ? 'low' : 'ok';
-    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null };
+    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null, quick: stock !== null, revision: 'demo-' + (100 + i) + '-' + stock };
   });
   const keys = (p: Product) => ['all', p.state === 'draft' ? 'draft' : p.preorder ? 'preorder' : p.state === 'low' || p.state === 'out' ? p.state : ''];
   const c = { all: 0, low: 0, out: 0, preorder: 0, draft: 0 } as ProductList['counts'];
@@ -313,6 +352,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
+  if (path === '/preorders') return { groups: preorderGroups() } as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {

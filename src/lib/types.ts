@@ -165,7 +165,29 @@ export type Product = {
   stock: number | null;
   waiting_alerts: number;
   image: string | null;
+  // API 1.3: stock can change from the app (simple product with tracked stock), and the version it was read at.
+  quick?: boolean;
+  revision?: string;
 };
+export type StockResult = { qty: number; revision: string; state: Product['state'] };
+// API 1.3: open pre-orders grouped by what they wait for.
+export type PreorderGroup = {
+  key: string;
+  name: string;
+  orders: number;
+  qty: number;
+  ready: number;
+  ready_ids: number[];
+  mixed: number;
+  oldest: string | null;
+  ago: string;
+  stock: number | null;
+  product_id: number | null;
+  image: string | null;
+  confirm: string;
+};
+export type PreorderList = { groups: PreorderGroup[] };
+export type ReleaseResult = { updated: number; skipped: { id: number; number: string; reason: string }[] };
 export type ProductList = {
   filter: ProductFilter;
   total: number;
