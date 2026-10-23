@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -133,7 +133,7 @@ function home(period: string): Home {
       whatsapp: { count: 1, order_id: 1036 },
       preorder: c.preorder,
     },
-    work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0) }; })(),
+    work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0), unpaid: { count: unpaidList().count, value: unpaidList().value } }; })(),
     stock: { low: 2, out: 2 },
     visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
@@ -167,6 +167,14 @@ function run(): Run {
   const cod = rows.filter((r) => r.cod_due !== null);
   return { date: new Date().toISOString().slice(0, 10), count: rows.length, cod_total: cod.reduce((sum, r) => sum + (r.cod_due ?? 0), 0), cod_count: cod.length, rows };
 }
+
+// Card payments that did not finish (invented); payment links and "handled" last for the session.
+const unpaidRows: UnpaidRow[] = [
+  { id: 1052, number: '1052', name: 'هيا م.', total: 17.0, items: '2× كوب المنامة', created: new Date(now - 3 * H).toISOString(), ago: 'قبل 3 ساعات', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'EazyPay card', reminder: 'انرسل تذكير تلقائي', opened: false, shared: null, whatsapp: '97333000052' },
+  { id: 1051, number: '1051', name: 'بدر ع.', total: 15.5, items: '1× طقم كوبين · هدية', created: new Date(now - 20 * H).toISOString(), ago: 'قبل 20 ساعة', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'Benefit', reminder: 'ما انرسل تذكير تلقائي (واحد لكل عميل كل ٤٨ ساعة)', opened: true, shared: null, whatsapp: '97333000051' },
+  { id: 1050, number: '1050', name: 'شوق ح.', total: 9.0, items: '1× كوب السيف', created: new Date(now - 50 * H).toISOString(), ago: 'قبل 2 أيام', status: 'cancelled', status_label: 'ملغي', payable: false, method: 'EazyPay card', reminder: '', opened: false, shared: null, whatsapp: '97333000050' },
+];
+const unpaidList = (): UnpaidList => ({ count: unpaidRows.length, value: unpaidRows.reduce((sum, r) => sum + r.total, 0), rows: unpaidRows });
 
 function order(id: number): Order {
   const o = orders.find((x) => x.id === id) ?? orders[0];
@@ -227,6 +235,17 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
   if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
   if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
+  if (/^\/orders\/\d+\/(payment-link|unpaid-dismiss)$/.test(path)) {
+    const [, , id, what] = path.split('/');
+    const i = unpaidRows.findIndex((r) => r.id === Number(id));
+    if (i < 0) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    if (what === 'unpaid-dismiss') { unpaidRows.splice(i, 1); return { ok: true } as T; }
+    const r = unpaidRows[i];
+    if (!r.payable) throw new Error(p.lang === 'en' ? 'This order can no longer be paid from a link.' : 'هالطلب ما عاد ينفع يندفع من رابط.');
+    r.shared = new Date().toISOString();
+    const url = 'https://koubbh.com/continue/demo' + r.id + '/';
+    return { url, text: 'هلا ' + r.name.split(' ')[0] + '، معك KOUB. دفع طلبك #' + r.number + ' ما اكتمل. تقدر تكمل الدفع من هالرابط:\n' + url, whatsapp: r.whatsapp } as T;
+  }
   if (/^\/orders\/\d+\/contact$/.test(path)) {
     const o = orders.find((x) => x.id === Number(path.split('/')[2]));
     if (!o) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
@@ -390,6 +409,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
   if (path === '/preorders') return { groups: preorderGroups() } as T;
   if (path === '/run') return run() as T;
+  if (path === '/unpaid') return unpaidList() as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {

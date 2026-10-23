@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -108,6 +108,10 @@ export const api = {
   // API 1.3: the delivery run and delivery details.
   run: (s: Session) => get<Run>(s, '/run'),
   orderContact: (s: Session, id: number, input: ContactInput) => post<Order>(s, '/orders/' + id + '/contact', { ...input, lang: appLang }),
+  // API 1.3: unfinished payments. Nothing is sent by the store; the app opens WhatsApp with the link filled in.
+  unpaid: (s: Session) => get<UnpaidList>(s, '/unpaid'),
+  paymentLink: (s: Session, id: number) => post<PaymentLink>(s, '/orders/' + id + '/payment-link', { lang: appLang }),
+  unpaidDismiss: (s: Session, id: number) => post<{ ok: boolean }>(s, '/orders/' + id + '/unpaid-dismiss', { lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.
