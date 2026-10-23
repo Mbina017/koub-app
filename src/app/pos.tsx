@@ -1,7 +1,7 @@
 // Shop till: tap items to build a sale, take cash, card or BenefitPay, and hand over a receipt.
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -138,6 +138,9 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [done, setDone] = useState<PosReceipt | null>(null);
+  // A new basket is a new sale: the reference only survives retries of the same items.
+  const basket = lines.map((l) => l.p.id + 'x' + l.qty).join(',');
+  useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dv = parse(disc);
   const discount = r3(Math.min(subtotal, discType === 'percent' ? (subtotal * Math.min(100, dv)) / 100 : dv));
@@ -149,7 +152,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty })), method, discount: dv, discount_type: discType,
-      cash_given: method === 'cash' ? cash : null, name: name.trim(), phone: phone.trim(),
+      cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
     onError: (e) => { tick('warn'); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },

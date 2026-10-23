@@ -240,7 +240,8 @@ function posCatalog(en: boolean): PosCatalog {
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
-  const ref = String(p.ref);
+  // Same reference and same basket: the same sale (as the store does).
+  const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => l.id + 'x' + l.qty).sort().join(',');
   const done = posSales.find((s) => (s as PosReceipt & { ref?: string }).ref === ref);
   if (done) return { ...done, repeat: true };
   const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: catalog[l.id - 100], ...l }));

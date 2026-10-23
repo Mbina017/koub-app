@@ -53,6 +53,8 @@ async function post<T>(session: Session, path: string, body: Record<string, unkn
   if (res.status === 403) throw new ApiError('forbidden', 'forbidden', 403);
   if (!res.ok) {
     const err = await res.json().catch(() => null);
+    // The koub-tap update with this route is not installed yet.
+    if (res.status === 404 && err?.code === 'rest_no_route') throw new ApiError('not_found', 'no_route', 404);
     // 409: the store refused this step (already done, wrong step, someone else is updating); its message says why.
     if (res.status === 409) throw new ApiError('refused', err?.message ?? 'HTTP 409', 409);
     throw new ApiError(res.status === 404 ? 'not_found' : 'server', err?.message ?? 'HTTP ' + res.status, res.status);
