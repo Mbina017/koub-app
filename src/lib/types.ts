@@ -68,6 +68,8 @@ export type Home = {
   stock: { low: number; out: number };
   visitors: { visitors: number; pageviews: number; orders: number } | null;
   latest: OrderSummary[];
+  // API 1.7: the shop till's own figures for the same period; the online figures above never include them.
+  shop?: { sales: number; count: number; expenses: number; profit: number; exact: boolean } | null;
 };
 
 export type OrderView = 'active' | 'preorder' | 'cod' | 'gifts' | 'all';
@@ -253,3 +255,29 @@ export type PosToday = {
   by_method: Record<PosMethod, number>;
   sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean }[];
 };
+
+// Shop books (API 1.7): the till's own sales, expenses and result, never mixed with the online store.
+export type ShopExpenseCat = 'stock' | 'rent' | 'salary' | 'bills' | 'other';
+export type ShopPeriod = 'today' | 'yesterday' | '7days' | 'month';
+export type ShopExpense = { id: string; date: string; amount: number; cat: ShopExpenseCat; cat_label: string; label: string; by: string; at: string | null; removable: boolean };
+export type ShopBooks = {
+  period: { preset: ShopPeriod; start: string; end: string; label: string };
+  sales: number;
+  count: number;
+  items: number;
+  average: number;
+  refunded: number;
+  by_method: Record<PosMethod, number>;
+  goods: number;
+  fees: number;
+  expenses: number;
+  by_category: { key: ShopExpenseCat; label: string; value: number }[];
+  // Not exact while a sold item has no cost: the result is then "at most" this amount.
+  profit: number;
+  exact: boolean;
+  missing: string[];
+  days: { date: string; sales: number; expenses: number }[];
+  entries: ShopExpense[];
+  categories: { key: ShopExpenseCat; label: string }[];
+};
+export type ShopExpenseInput = { ref: string; amount: number; cat: ShopExpenseCat; label: string; date: string };

@@ -66,6 +66,9 @@ export default function Pos() {
         <Touch onPress={() => router.push('/pos-today')} style={st.pill}>
           <Txt size={13} weight="semibold">{t('posToday')}</Txt>
         </Touch>
+        <Touch onPress={() => router.push('/pos-books')} style={st.pill}>
+          <Txt size={13} weight="semibold">{t('booksShort')}</Txt>
+        </Touch>
       </Row>
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
         <Row style={st.search}>
@@ -120,7 +123,7 @@ export default function Pos() {
         onClose={() => setOpen(false)}
         onDone={() => {
           setCart({});
-          for (const k of ['pos-catalog', 'pos-today', 'home', 'products', 'numbers', 'orders']) qc.invalidateQueries({ queryKey: [k] });
+          for (const k of ['pos-catalog', 'pos-today', 'pos-books', 'home', 'products']) qc.invalidateQueries({ queryKey: [k] });
         }}
       />
     </View>
