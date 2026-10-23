@@ -14,12 +14,15 @@ type Preset = Exclude<NumbersPeriod, 'custom'>;
 
 export default function Numbers() {
   const session = useApiSession();
-  const { t } = useSession();
+  const { t, me } = useSession();
   const [period, setPeriod] = useState<Preset>('today');
+  // API 1.7 stores keep the shop till in its own books.
+  const apart = !!me && me.api !== 'demo' ? Number(me.api.split('.')[0]) * 100 + Number(me.api.split('.')[1] ?? 0) >= 107 : true;
   const q = useQuery({ queryKey: ['numbers', period], queryFn: () => api.numbers(session, { period }) });
   return (
     <Screen title={t('numbers')} refreshing={q.isRefetching} onRefresh={q.refetch}>
       <Segmented items={[['today', t('today')], ['yesterday', t('yesterday')], ['7days', t('days7')], ['month', t('month')]]} value={period} onChange={setPeriod} />
+      {apart && <Muted size={12} style={{ marginTop: space.sm }}>{t('onlineOnly')}</Muted>}
       {q.isError && !q.data ? <ErrorState onRetry={q.refetch} /> : !q.data ? (
         <View style={{ gap: space.md, marginTop: space.xl }}>{[150, 200, 220, 120].map((h, i) => <Skeleton key={i} h={h} r={radius.lg} />)}</View>
       ) : <Body d={q.data} />}

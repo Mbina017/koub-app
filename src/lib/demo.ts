@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -137,6 +137,7 @@ function home(period: string): Home {
     stock: { low: 2, out: 2 },
     visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
+    shop: (() => { const b = posBooks(period === '7days' ? '7days' : period, false); return { sales: b.sales, count: b.count, expenses: b.expenses, profit: b.profit, exact: b.exact }; })(),
   };
 }
 
@@ -284,8 +285,52 @@ function posVoid(id: number, en: boolean): PosReceipt {
   return s;
 }
 
+// ---- Shop books: today's till sales and the expenses entered in the demo, kept in memory.
+const expenseLabel = (c: ShopExpenseCat, en: boolean) => ({ stock: en ? 'Supplies and stock' : 'مواد وبضاعة', rent: en ? 'Rent' : 'إيجار', salary: en ? 'Salaries' : 'رواتب', bills: en ? 'Bills' : 'فواتير', other: en ? 'Other' : 'ثاني' })[c];
+const shopExpenses: ShopExpense[] = [
+  { id: 'demo-exp-1', date: ymd(new Date()), amount: 6.5, cat: 'stock', cat_label: expenseLabel('stock', false), label: 'حليب وثلج', by: 'KOUB', at: new Date().toISOString(), removable: true },
+];
+function posBooks(period: string, en: boolean): ShopBooks {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const now = new Date();
+  const days = period === 'yesterday' ? 1 : period === '7days' ? 7 : period === 'month' ? Number(ymd(now).slice(8)) : 1;
+  const end = period === 'yesterday' ? ymd(new Date(now.getTime() - 86400_000)) : ymd(now);
+  const start = ymd(new Date(new Date(end + 'T12:00:00Z').getTime() - (days - 1) * 86400_000));
+  const live = period === 'yesterday' ? [] : posSales.filter((s) => s.status === 'completed');
+  const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
+  live.forEach((s) => (by[s.method] = r3(by[s.method] + s.total)));
+  const sales = r3(live.reduce((a, s) => a + s.total, 0));
+  const fees = r3((by.card + by.benefit) * 0.02);
+  const goods = r3(sales * 0.35);
+  const entries = shopExpenses.filter((e) => e.date >= start && e.date <= end).map((e) => ({ ...e, cat_label: expenseLabel(e.cat, en) }));
+  const expenses = r3(entries.reduce((a, e) => a + e.amount, 0));
+  const cats = new Map<ShopExpenseCat, number>();
+  entries.forEach((e) => cats.set(e.cat, r3((cats.get(e.cat) ?? 0) + e.amount)));
+  const count = live.length;
+  return {
+    period: { preset: period as ShopBooks['period']['preset'], start, end, label: start === end ? end : start + ' – ' + end },
+    sales, count, items: live.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0), average: count ? r3(sales / count) : 0, refunded: 0,
+    by_method: by, goods, fees, expenses,
+    by_category: [...cats].map(([key, value]) => ({ key, label: expenseLabel(key, en), value })).sort((a, b) => b.value - a.value),
+    profit: r3(sales - goods - fees - expenses), exact: false, missing: [en ? 'Karak (no cost yet)' : 'كرك (ما له تكلفة للحين)'],
+    days: [], entries, categories: (['stock', 'rent', 'salary', 'bills', 'other'] as ShopExpenseCat[]).map((key) => ({ key, label: expenseLabel(key, en) })),
+  };
+}
+function expenseAdd(p: Record<string, unknown>, en: boolean): { entry: ShopExpense; repeat?: boolean } {
+  const done = shopExpenses.find((e) => e.id === p.ref);
+  if (done) return { entry: done, repeat: true };
+  const amount = Math.round(Number(p.amount) * 1000) / 1000;
+  if (!(amount > 0)) throw new Error(en ? 'Enter the amount paid.' : 'اكتب المبلغ المدفوع.');
+  const cat = (p.cat as ShopExpenseCat) ?? 'other';
+  const entry: ShopExpense = { id: String(p.ref), date: String(p.date || ymd(new Date())), amount, cat, cat_label: expenseLabel(cat, en), label: String(p.label ?? ''), by: 'KOUB', at: new Date().toISOString(), removable: true };
+  shopExpenses.unshift(entry);
+  return { entry };
+}
+
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
+  if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
+  if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
   if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en') as T;
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
@@ -468,6 +513,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/unpaid') return unpaidList() as T;
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
+  if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {
