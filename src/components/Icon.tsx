@@ -3,6 +3,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { color } from '../lib/theme';
 
 const paths = {
+  print: <><Path d="M7 9V4h10v5" /><Rect x="4" y="9" width="16" height="8" rx="2" /><Path d="M7 14h10v6H7z" /></>,
   home: <Path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" />,
   orders: <><Path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><Path d="M4 8l8 4 8-4M12 12v8" /></>,
   products: <><Path d="M6 5h11v11a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" /><Path d="M17 8h1.5a2.5 2.5 0 0 1 0 5H17" /></>,

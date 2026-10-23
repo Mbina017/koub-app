@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,8 +11,10 @@ import { api, ApiError, dashboardOrderUrl } from '../../lib/api';
 import { useApiSession, useSession } from '../../lib/session';
 import { color, font, radius, space, tone } from '../../lib/theme';
 import { money, num } from '../../lib/format';
-import type { CostKey, Order, OrderAction } from '../../lib/types';
+import type { ContactEdit, ContactInput, CostKey, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
+import { confirmStep, showMessage } from '../../lib/confirm';
+import { shareSlips } from '../../lib/print';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 
@@ -26,6 +28,13 @@ export default function OrderScreen() {
   const dash = dashboardOrderUrl(session, Number(id));
   // The sticky bar grows with the number of actions; the page scrolls past whatever height it has.
   const [barH, setBarH] = useState(120);
+  const [printing, setPrinting] = useState(false);
+  const print = async () => {
+    setPrinting(true);
+    try { await shareSlips(session, [Number(id)], 'KOUB-' + (o?.number ?? id)); }
+    catch (e) { showMessage(t('notPrinted'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : (e as Error).message); }
+    finally { setPrinting(false); }
+  };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: color.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -37,6 +46,11 @@ export default function OrderScreen() {
           <Txt size={19} weight="bold">{t('order', { n: o?.number ?? id })}</Txt>
           {o && <Muted size={12}>{o.ago}</Muted>}
         </View>
+        {o?.actions && (
+          <Touch onPress={print} disabled={printing} style={st.iconBtn} accessibilityLabel={t('printSlip')}>
+            <Icon name="print" size={22} tint={printing ? color.faint : color.ink} />
+          </Touch>
+        )}
       </Row>
       {q.isError && !o ? <ErrorState onRetry={q.refetch} /> : !o ? (
         <View style={{ padding: space.lg, gap: space.md }}>{[70, 180, 160, 140].map((h, i) => <Skeleton key={i} h={h} r={radius.lg} />)}</View>
@@ -70,15 +84,6 @@ export default function OrderScreen() {
   );
 }
 
-// Ask first, with the store's own wording. Alert buttons don't exist on the web preview, so it uses the browser's confirm.
-function confirmStep(a: OrderAction, back: string, run: () => void) {
-  if (Platform.OS === 'web') { if (window.confirm(a.confirm)) run(); return; }
-  Alert.alert(a.label, a.confirm, [{ text: back, style: 'cancel' }, { text: a.label, style: a.tone === 'danger' ? 'destructive' : 'default', onPress: run }]);
-}
-
-function showError(title: string, message: string) {
-  if (Platform.OS === 'web') window.alert(title + '\n' + message); else Alert.alert(title, message);
-}
 
 // After a change, the order screen, the lists and Home all show the new state.
 function useOrderUpdate(id: number) {
@@ -100,7 +105,7 @@ function Actions({ o }: { o: Order }) {
     onSuccess: (data) => { update(data); if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); },
     onError: (e) => {
       // Refused means the order moved on (another phone, or the dashboard): show why and load its current state.
-      showError(t('notUpdated'), e instanceof ApiError && (e.kind === 'refused' || e.kind === 'server') ? e.message : e instanceof ApiError && e.kind === 'network' ? t('errNetwork') : e.message);
+      showMessage(t('notUpdated'), e instanceof ApiError && (e.kind === 'refused' || e.kind === 'server') ? e.message : e instanceof ApiError && e.kind === 'network' ? t('errNetwork') : e.message);
       qc.invalidateQueries({ queryKey: ['order', String(o.id)] });
     },
   });
@@ -108,9 +113,11 @@ function Actions({ o }: { o: Order }) {
   if (!actions.length) return <Muted size={13} center>{o.no_action ?? t('nothingToDo')}</Muted>;
   const main = actions.filter((a) => a.tone === 'primary');
   const cancel = actions.find((a) => a.tone === 'danger');
+  const undo = actions.filter((a) => a.tone === 'undo');
   const busy = run.isPending ? run.variables?.key : undefined;
   return (
     <View style={{ gap: 8 }}>
+      {main.length === 0 && !!o.no_action && <Muted size={13} center>{o.no_action}</Muted>}
       {main.map((a, i) => (
         <Button key={a.key} label={a.label} kind={i === 0 ? 'primary' : 'light'} icon={a.key === 'out_delivery' ? 'truck' : a.key === 'cod_collected' ? 'cash' : 'check'}
           loading={busy === a.key} disabled={run.isPending} onPress={() => confirmStep(a, t('notNow'), () => run.mutate(a))} />
@@ -119,6 +126,15 @@ function Actions({ o }: { o: Order }) {
         <Touch onPress={() => confirmStep(cancel, t('notNow'), () => run.mutate(cancel))} disabled={run.isPending} style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}>
           <Txt size={14} weight="medium" tint={color.red} center>{busy === 'cancel' ? '…' : cancel.label}</Txt>
         </Touch>
+      )}
+      {undo.length > 0 && (
+        <Row gap={4} style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+          {undo.map((a) => (
+            <Touch key={a.key} onPress={() => confirmStep(a, t('notNow'), () => run.mutate(a))} disabled={run.isPending} style={{ paddingVertical: 6, paddingHorizontal: 10 }}>
+              <Row gap={6}><Icon name="back" size={15} tint={color.muted} /><Txt size={13} weight="medium" tint={color.muted}>{busy === a.key ? '…' : a.label}</Txt></Row>
+            </Touch>
+          ))}
+        </Row>
       )}
     </View>
   );
@@ -133,7 +149,7 @@ function NoteBox({ o }: { o: Order }) {
   const save = useMutation({
     mutationFn: () => api.orderNote(session, o.id, text.trim()),
     onSuccess: (data) => { update(data); setText(''); tap('select'); },
-    onError: (e) => showError(t('notSaved'), e.message),
+    onError: (e) => showMessage(t('notSaved'), e.message),
   });
   return (
     <Row gap={8} style={{ marginTop: space.md }}>
@@ -141,6 +157,53 @@ function NoteBox({ o }: { o: Order }) {
         style={[st.note, { textAlign: lang === 'ar' ? 'right' : 'left', fontFamily: font.regular }]} />
       <Button label={t('save')} kind="light" loading={save.isPending} disabled={!text.trim()} onPress={() => save.mutate()} style={{ paddingHorizontal: 16 }} />
     </Row>
+  );
+}
+
+// Delivery details from the phone (API 1.3): the order screen's own fields and checks; the store logs the change.
+function ContactEditor({ o, edit }: { o: Order; edit: ContactEdit }) {
+  const session = useApiSession();
+  const { t, lang } = useSession();
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState<ContactInput>(edit.values);
+  const update = useOrderUpdate(o.id);
+  const save = useMutation({
+    mutationFn: () => {
+      const input: ContactInput = { whatsapp: v.whatsapp ?? '' };
+      if (edit.fields.includes('call')) input.call = v.call ?? '';
+      if (edit.fields.includes('recipient')) input.recipient = v.recipient ?? '';
+      if (edit.fields.includes('address')) { input.address = v.address ?? ''; input.city = v.city ?? ''; }
+      return api.orderContact(session, o.id, input);
+    },
+    onSuccess: (data) => { update(data); setOpen(false); tap('select'); showMessage(t('save'), t('contactSaved')); },
+    onError: (e) => showMessage(t('notSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+  });
+  const field = (k: keyof ContactInput, label: string, opts: { phone?: boolean; hint?: string; multiline?: boolean } = {}) => (
+    <View style={{ gap: 4 }}>
+      <Txt size={13} weight="medium" tint={color.muted}>{label}</Txt>
+      <TextInput value={v[k] ?? ''} onChangeText={(x) => setV({ ...v, [k]: x })} keyboardType={opts.phone ? 'phone-pad' : 'default'} multiline={opts.multiline} maxLength={opts.phone ? 25 : k === 'city' ? 80 : 250}
+        placeholder={opts.hint} placeholderTextColor={color.faint} style={[st.note, { flex: 0, textAlign: opts.phone ? 'left' : lang === 'ar' ? 'right' : 'left', fontFamily: font.regular }, opts.phone && { writingDirection: 'ltr' }]} />
+    </View>
+  );
+  if (!open) return (
+    <Touch onPress={() => { setV(edit.values); setOpen(true); }} style={[st.action, { flex: 0, flexDirection: 'row', justifyContent: 'center', marginTop: space.md }]}>
+      <Icon name="edit" size={18} /><Txt size={14} weight="medium">{edit.fields.includes('address') ? t('editContact') : t('editNumbers')}</Txt>
+    </Touch>
+  );
+  return (
+    <View style={{ gap: space.md, marginTop: space.md }}>
+      {edit.out_for_delivery && <Banner tint="amber" text={t('outWarn')} />}
+      {field('whatsapp', o.gift ? t('senderWhatsapp') : t('whatsappNumber'), { phone: true })}
+      {edit.fields.includes('call') && field('call', t('callNumber'), { phone: true, hint: t('callHint') })}
+      {edit.fields.includes('recipient') && field('recipient', t('recipientWa'), { phone: true })}
+      {edit.fields.includes('address') && field('address', t('addressLabel'), { multiline: true })}
+      {edit.fields.includes('address') && field('city', t('areaLabel'))}
+      {edit.fields.includes('address') && <Muted size={12}>{t('countryFixed')}</Muted>}
+      <Row gap={8}>
+        <Button label={t('save')} icon="check" loading={save.isPending} disabled={!(v.whatsapp ?? '').trim()} onPress={() => save.mutate()} style={{ flex: 2 }} />
+        <Button label={t('notNow')} kind="light" onPress={() => setOpen(false)} style={{ flex: 1 }} />
+      </Row>
+    </View>
   );
 }
 
@@ -215,6 +278,7 @@ function Customer({ o }: { o: Order }) {
           {!o.pickup && !o.gift?.waiting_address && <Muted size={12}>{o.address.country}</Muted>}
         </View>
       </Row>
+      {o.contact_edit && <ContactEditor o={o} edit={o.contact_edit} />}
       {o.gift && (
         <View style={[st.inset, { backgroundColor: color.blueBg }]}>
           <Row gap={8}><Icon name="gift" size={18} tint={color.blue} /><Txt size={14} weight="semibold" tint={color.blue}>{t('giftFor', { n: o.gift.name || '…' })}</Txt></Row>

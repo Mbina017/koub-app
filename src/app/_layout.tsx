@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Platform, View } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { AppState, Platform, Pressable, Text, View } from 'react-native';
+import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
-import { orderFromNotification, useLastAlertTap } from '../lib/push';
+import { targetFromNotification, useLastAlertTap } from '../lib/push';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -30,23 +31,22 @@ if (Platform.OS !== 'web') {
   AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'));
 }
 
-// A tapped alert opens its order; any alert refreshes the order lists.
+// A tapped alert opens what it is about; any alert refreshes the lists.
 function useAlerts(signedIn: boolean) {
   const last = useLastAlertTap();
   const handled = useRef<string | null>(null);
   useEffect(() => {
-    const id = orderFromNotification(last);
+    const target = targetFromNotification(last);
     const key = last?.notification.request.identifier ?? null;
     // Open each tapped alert once, after sign-in and unlock.
-    if (!signedIn || !id || handled.current === key) return;
+    if (!signedIn || !target || handled.current === key) return;
     handled.current = key;
-    router.push({ pathname: '/order/[id]', params: { id: String(id) } });
+    router.push(target);
   }, [last, signedIn]);
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Notifications.addNotificationReceivedListener(() => {
-      client.invalidateQueries({ queryKey: ['home'] });
-      client.invalidateQueries({ queryKey: ['orders'] });
+      for (const k of ['home', 'orders', 'unpaid', 'preorders', 'products']) client.invalidateQueries({ queryKey: [k] });
     });
     return () => sub.remove();
   }, []);
@@ -70,11 +70,37 @@ function Gate() {
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="order/[id]" />
+          <Stack.Screen name="preorders" />
+          <Stack.Screen name="run" />
+          <Stack.Screen name="unpaid" />
+          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="pos-today" />
+          <Stack.Screen name="pos-books" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />
         </Stack.Protected>
       </Stack>
+    </View>
+  );
+}
+
+// Last resort for a crash while drawing a screen: a calm page instead of a blank one.
+// Plain Text and both languages, because fonts, session and language may be what failed.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { SplashScreen.hideAsync().catch(() => {}); }, []);
+  const details = error instanceof Error ? `${error.name}: ${error.message}\n${(error.stack ?? '').split('\n').slice(0, 8).join('\n')}` : String(error);
+  return (
+    <View style={{ flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 }}>
+      <Text style={{ fontSize: 18, fontWeight: '600', color: color.ink, textAlign: 'center' }}>صار خطأ غير متوقع</Text>
+      <Text style={{ fontSize: 15, color: color.muted, textAlign: 'center' }}>Something went wrong</Text>
+      <Pressable onPress={retry} style={{ marginTop: 16, backgroundColor: color.ink, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 }}>
+        <Text style={{ color: color.bg, fontSize: 16, fontWeight: '600' }}>جرّب مرة ثانية · Try again</Text>
+      </Pressable>
+      <Pressable onPress={() => { Clipboard.setStringAsync(details).then(() => setCopied(true)).catch(() => {}); }} style={{ padding: 12 }}>
+        <Text style={{ color: color.muted, fontSize: 13 }}>{copied ? 'تم النسخ · Copied' : 'انسخ تفاصيل الخطأ · Copy error details'}</Text>
+      </Pressable>
     </View>
   );
 }
