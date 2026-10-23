@@ -64,7 +64,7 @@ export type Home = {
     preorder: number;
   };
   // API 1.3: today's work — the delivery run and pre-orders whose stock is in.
-  work?: { run: { count: number; total: number; cod: number }; preorder_ready: number } | null;
+  work?: { run: { count: number; total: number; cod: number }; preorder_ready: number; unpaid?: { count: number; value: number } } | null;
   stock: { low: number; out: number };
   visitors: { visitors: number; pageviews: number; orders: number } | null;
   latest: OrderSummary[];
@@ -208,3 +208,7 @@ export type ContactInput = Partial<Record<'whatsapp' | 'call' | 'recipient' | 'a
 // API 1.3: the day's delivery run, by area.
 export type RunRow = { id: number; number: string; name: string; area: string; address: string; items: string; call: string | null; whatsapp: string | null; cod_due: number | null; gift: boolean; today: boolean; map: string | null };
 export type Run = { date: string; count: number; cod_total: number; cod_count: number; rows: RunRow[] };
+// API 1.3: card payments that did not finish, and the order's own payment link to send from staff WhatsApp.
+export type UnpaidRow = { id: number; number: string; name: string; total: number; items: string; created: string | null; ago: string; status: string; status_label: string; payable: boolean; method: string; reminder: string; opened: boolean; shared: string | null; whatsapp: string | null };
+export type UnpaidList = { count: number; value: number; rows: UnpaidRow[] };
+export type PaymentLink = { url: string; text: string; whatsapp: string | null };
