@@ -51,6 +51,8 @@ export default function More() {
       <SectionTitle title={t('alerts')} icon="bell" />
       <Card padded={false}>
         <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last={!push.on} />
+        {push.on && <Item icon="cash" label={t('unpaidAlerts')} sub={t('unpaidAlertsHint')} right={<Switch value={push.unpaid} disabled={busy} onValueChange={(unpaid) => changePush({ ...push, unpaid })} trackColor={{ true: color.ink, false: color.line }} />} />}
+        {push.on && <Item icon="products" label={t('stockAlerts')} sub={t('stockAlertsHint')} right={<Switch value={push.stock} disabled={busy} onValueChange={(stock) => changePush({ ...push, stock })} trackColor={{ true: color.ink, false: color.line }} />} />}
         {push.on && <Item icon="lock" label={t('quietNight')} sub={t('quietNightHint')} right={<Switch value={push.quiet} disabled={busy} onValueChange={(quiet) => changePush({ ...push, quiet })} trackColor={{ true: color.ink, false: color.line }} />} last />}
       </Card>
       {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
