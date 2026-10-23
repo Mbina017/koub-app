@@ -26,9 +26,16 @@ export default function Home() {
         <Txt size={30} style={{ fontFamily: font.brand, letterSpacing: 3, lineHeight: 36 }} ltr>KOUB</Txt>
         <Muted>{today(new Date(), lang)}</Muted>
       </View>
-      <Touch onPress={() => router.push('/more')} style={st.avatar} accessibilityLabel={t('account')}>
-        <Txt size={16} weight="semibold" tint={color.bg} center>{me?.initial ?? 'K'}</Txt>
-      </Touch>
+      <Row gap={8}>
+        {/* The shop till, one tap from home. */}
+        <Touch onPress={() => router.push('/pos')} style={st.till} accessibilityLabel={t('pos')}>
+          <Icon name="cash" size={18} tint={color.bg} />
+          <Txt size={14} weight="semibold" tint={color.bg}>{t('pos')}</Txt>
+        </Touch>
+        <Touch onPress={() => router.push('/more')} style={st.avatar} accessibilityLabel={t('account')}>
+          <Txt size={16} weight="semibold" tint={color.bg} center>{me?.initial ?? 'K'}</Txt>
+        </Touch>
+      </Row>
     </Row>
   );
 
@@ -174,6 +181,7 @@ function HomeSkeleton() {
 
 const st = StyleSheet.create({
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
+  till: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: color.ink },
   delta: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, justifyContent: 'space-between' },
   tile: { width: '48.2%', minHeight: 128, backgroundColor: color.surface, borderRadius: radius.lg, padding: space.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, gap: 2 },

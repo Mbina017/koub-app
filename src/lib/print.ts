@@ -12,7 +12,7 @@ export async function shareSlips(session: Session, ids: number[], name: string) 
 }
 
 // Any page the app prints (the slips, the delivery run): a PDF named for what it is, then the share sheet.
-export async function sharePdf(html: string, name: string) {
+export async function sharePdf(html: string, name: string, size: { width: number; height: number } = { width: 595, height: 842 }) {
   if (Platform.OS === 'web') {
     const w = window.open('', '_blank');
     if (!w) return;
@@ -21,8 +21,8 @@ export async function sharePdf(html: string, name: string) {
     w.onload = () => w.print();
     return;
   }
-  // A4, the size the slip is designed for.
-  const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
+  // A4 by default, the size the slip is designed for; receipts pass a till-roll size.
+  const { uri } = await Print.printToFileAsync({ html, ...size });
   let file = uri;
   try {
     const to = FileSystem.cacheDirectory + name + '.pdf';

@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -230,8 +230,64 @@ function actions(o: DemoOrder): OrderAction[] {
   return out;
 }
 
+// ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
+const posSales: PosReceipt[] = [];
+const menuDrinks: [string, number][] = [['سبانش لاتيه', 2.2], ['آيس لاتيه', 2.1], ['أمريكانو', 1.5], ['كرك', 0.8]];
+const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
+function posCatalog(en: boolean): PosCatalog {
+  return {
+    products: [
+      ...menuDrinks.map(([name, price], i) => ({ id: 700 + i, name, group: 'drinks' as const, sku: 'MENU-' + i, price, stock: null, image: null })),
+      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+    ],
+    methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
+  };
+}
+function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
+  // Same reference and same basket: the same sale (as the store does).
+  const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => l.id + 'x' + l.qty).sort().join(',');
+  const done = posSales.find((s) => (s as PosReceipt & { ref?: string }).ref === ref);
+  if (done) return { ...done, repeat: true };
+  const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: (l.id >= 700 ? [menuDrinks[l.id - 700][0], menuDrinks[l.id - 700][1], null, null] : catalog[l.id - 100]) as (typeof catalog)[number], ...l }));
+  if (!lines.length) throw new Error(en ? 'The sale is empty.' : 'البيع فاضي.');
+  for (const l of lines) if (l.row && l.row[3] !== null && l.row[3] < l.qty) throw new Error(en ? l.row[0] + ': the store shows ' + l.row[3] + ' in stock. Fix the stock count first.' : l.row[0] + ': المخزون في النظام ' + l.row[3] + '. عدّل المخزون أول.');
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const sub = r3(lines.reduce((s, l) => s + l.row[1] * l.qty, 0));
+  const value = Number(p.discount) || 0;
+  const discount = r3(Math.min(sub, p.discount_type === 'percent' ? (sub * Math.min(100, value)) / 100 : value));
+  const total = r3(sub - discount);
+  const method = p.method as PosMethod;
+  const given = method === 'cash' && p.cash_given != null ? Number(p.cash_given) : null;
+  if (given !== null && given < total) throw new Error(en ? 'The cash given is less than the total.' : 'الكاش المستلم أقل من المجموع.');
+  for (const l of lines) if (l.row[3] !== null) l.row[3] -= l.qty;
+  const phone = String(p.phone ?? '').replace(/\D+/g, '');
+  const sale: PosReceipt & { ref: string } = {
+    ref, id: 900 + posSales.length, number: String(2400 + posSales.length), status: 'completed', date: new Date().toISOString(),
+    lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty) })), discount, total, method, method_label: methodLabel(method, en),
+    cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
+  };
+  posSales.unshift(sale);
+  return sale;
+}
+function posToday(): PosToday {
+  const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
+  const live = posSales.filter((s) => s.status === 'completed');
+  live.forEach((s) => (by[s.method] = Math.round((by[s.method] + s.total) * 1000) / 1000));
+  return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
+    sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
+}
+function posVoid(id: number, en: boolean): PosReceipt {
+  const s = posSales.find((x) => x.id === id);
+  if (!s || s.status !== 'completed') throw new Error(en ? 'Only a shop sale from today can be cancelled here.' : 'بس بيع المحل من اليوم ينلغى من هني.');
+  s.status = 'cancelled'; s.voidable = false;
+  for (const l of s.lines) { const row = catalog.find((c) => c[0] === l.name); if (row && row[3] !== null) row[3] += l.qty; }
+  return s;
+}
+
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
+  if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en') as T;
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
   if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
   if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
@@ -410,6 +466,8 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/preorders') return { groups: preorderGroups() } as T;
   if (path === '/run') return run() as T;
   if (path === '/unpaid') return unpaidList() as T;
+  if (path === '/pos/catalog') return posCatalog(false) as T;
+  if (path === '/pos/today') return posToday() as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {

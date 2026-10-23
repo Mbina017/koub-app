@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform, View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import { orderFromNotification, useLastAlertTap } from '../lib/push';
+import { targetFromNotification, useLastAlertTap } from '../lib/push';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -30,23 +30,22 @@ if (Platform.OS !== 'web') {
   AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'));
 }
 
-// A tapped alert opens its order; any alert refreshes the order lists.
+// A tapped alert opens what it is about; any alert refreshes the lists.
 function useAlerts(signedIn: boolean) {
   const last = useLastAlertTap();
   const handled = useRef<string | null>(null);
   useEffect(() => {
-    const id = orderFromNotification(last);
+    const target = targetFromNotification(last);
     const key = last?.notification.request.identifier ?? null;
     // Open each tapped alert once, after sign-in and unlock.
-    if (!signedIn || !id || handled.current === key) return;
+    if (!signedIn || !target || handled.current === key) return;
     handled.current = key;
-    router.push({ pathname: '/order/[id]', params: { id: String(id) } });
+    router.push(target);
   }, [last, signedIn]);
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Notifications.addNotificationReceivedListener(() => {
-      client.invalidateQueries({ queryKey: ['home'] });
-      client.invalidateQueries({ queryKey: ['orders'] });
+      for (const k of ['home', 'orders', 'unpaid', 'preorders', 'products']) client.invalidateQueries({ queryKey: [k] });
     });
     return () => sub.remove();
   }, []);
@@ -73,6 +72,8 @@ function Gate() {
           <Stack.Screen name="preorders" />
           <Stack.Screen name="run" />
           <Stack.Screen name="unpaid" />
+          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="pos-today" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />
