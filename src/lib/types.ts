@@ -63,6 +63,8 @@ export type Home = {
     whatsapp: { count: number; order_id: number | null };
     preorder: number;
   };
+  // API 1.3: today's work — the delivery run and pre-orders whose stock is in.
+  work?: { run: { count: number; total: number; cod: number }; preorder_ready: number } | null;
   stock: { low: number; out: number };
   visitors: { visitors: number; pageviews: number; orders: number } | null;
   latest: OrderSummary[];
@@ -111,6 +113,8 @@ export type Order = {
     spent: number | null;
   };
   address: { text: string; country: string };
+  // API 1.3: delivery details this order can change from the app, with their saved values; null when it is closed.
+  contact_edit?: ContactEdit | null;
   gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean } | null;
   note: string;
   items: { name: string; qty: number; total: number; image: string | null; product_id: number; parts: { name: string; qty: number }[] }[];
@@ -196,3 +200,11 @@ export type ProductList = {
   counts: Record<ProductFilter, number>;
   products: Product[];
 };
+
+// API 1.3: delivery details from the app.
+export type ContactField = 'whatsapp' | 'call' | 'recipient' | 'address';
+export type ContactEdit = { fields: ContactField[]; values: { whatsapp: string; call: string; recipient: string; address: string; city: string }; out_for_delivery: boolean };
+export type ContactInput = Partial<Record<'whatsapp' | 'call' | 'recipient' | 'address' | 'city', string>>;
+// API 1.3: the day's delivery run, by area.
+export type RunRow = { id: number; number: string; name: string; area: string; address: string; items: string; call: string | null; whatsapp: string | null; cod_due: number | null; gift: boolean; today: boolean; map: string | null };
+export type Run = { date: string; count: number; cod_total: number; cod_count: number; rows: RunRow[] };

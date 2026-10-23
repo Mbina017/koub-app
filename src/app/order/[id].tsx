@@ -11,7 +11,7 @@ import { api, ApiError, dashboardOrderUrl } from '../../lib/api';
 import { useApiSession, useSession } from '../../lib/session';
 import { color, font, radius, space, tone } from '../../lib/theme';
 import { money, num } from '../../lib/format';
-import type { CostKey, Order, OrderAction } from '../../lib/types';
+import type { ContactEdit, ContactInput, CostKey, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
 import { confirmStep, showMessage } from '../../lib/confirm';
 import { shareSlips } from '../../lib/print';
@@ -160,6 +160,53 @@ function NoteBox({ o }: { o: Order }) {
   );
 }
 
+// Delivery details from the phone (API 1.3): the order screen's own fields and checks; the store logs the change.
+function ContactEditor({ o, edit }: { o: Order; edit: ContactEdit }) {
+  const session = useApiSession();
+  const { t, lang } = useSession();
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState<ContactInput>(edit.values);
+  const update = useOrderUpdate(o.id);
+  const save = useMutation({
+    mutationFn: () => {
+      const input: ContactInput = { whatsapp: v.whatsapp ?? '' };
+      if (edit.fields.includes('call')) input.call = v.call ?? '';
+      if (edit.fields.includes('recipient')) input.recipient = v.recipient ?? '';
+      if (edit.fields.includes('address')) { input.address = v.address ?? ''; input.city = v.city ?? ''; }
+      return api.orderContact(session, o.id, input);
+    },
+    onSuccess: (data) => { update(data); setOpen(false); tap('select'); showMessage(t('save'), t('contactSaved')); },
+    onError: (e) => showMessage(t('notSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+  });
+  const field = (k: keyof ContactInput, label: string, opts: { phone?: boolean; hint?: string; multiline?: boolean } = {}) => (
+    <View style={{ gap: 4 }}>
+      <Txt size={13} weight="medium" tint={color.muted}>{label}</Txt>
+      <TextInput value={v[k] ?? ''} onChangeText={(x) => setV({ ...v, [k]: x })} keyboardType={opts.phone ? 'phone-pad' : 'default'} multiline={opts.multiline} maxLength={opts.phone ? 25 : k === 'city' ? 80 : 250}
+        placeholder={opts.hint} placeholderTextColor={color.faint} style={[st.note, { flex: 0, textAlign: opts.phone ? 'left' : lang === 'ar' ? 'right' : 'left', fontFamily: font.regular }, opts.phone && { writingDirection: 'ltr' }]} />
+    </View>
+  );
+  if (!open) return (
+    <Touch onPress={() => { setV(edit.values); setOpen(true); }} style={[st.action, { flex: 0, flexDirection: 'row', justifyContent: 'center', marginTop: space.md }]}>
+      <Icon name="edit" size={18} /><Txt size={14} weight="medium">{edit.fields.includes('address') ? t('editContact') : t('editNumbers')}</Txt>
+    </Touch>
+  );
+  return (
+    <View style={{ gap: space.md, marginTop: space.md }}>
+      {edit.out_for_delivery && <Banner tint="amber" text={t('outWarn')} />}
+      {field('whatsapp', o.gift ? t('senderWhatsapp') : t('whatsappNumber'), { phone: true })}
+      {edit.fields.includes('call') && field('call', t('callNumber'), { phone: true, hint: t('callHint') })}
+      {edit.fields.includes('recipient') && field('recipient', t('recipientWa'), { phone: true })}
+      {edit.fields.includes('address') && field('address', t('addressLabel'), { multiline: true })}
+      {edit.fields.includes('address') && field('city', t('areaLabel'))}
+      {edit.fields.includes('address') && <Muted size={12}>{t('countryFixed')}</Muted>}
+      <Row gap={8}>
+        <Button label={t('save')} icon="check" loading={save.isPending} disabled={!(v.whatsapp ?? '').trim()} onPress={() => save.mutate()} style={{ flex: 2 }} />
+        <Button label={t('notNow')} kind="light" onPress={() => setOpen(false)} style={{ flex: 1 }} />
+      </Row>
+    </View>
+  );
+}
+
 function Banner({ text, tint }: { text: string; tint: 'red' | 'amber' }) {
   return <View style={[st.banner, { backgroundColor: tone[tint].bg }]}><Icon name="warn" size={18} tint={tone[tint].fg} /><Txt size={14} weight="medium" tint={tone[tint].fg} style={{ flex: 1 }}>{text}</Txt></View>;
 }
@@ -231,6 +278,7 @@ function Customer({ o }: { o: Order }) {
           {!o.pickup && !o.gift?.waiting_address && <Muted size={12}>{o.address.country}</Muted>}
         </View>
       </Row>
+      {o.contact_edit && <ContactEditor o={o} edit={o.contact_edit} />}
       {o.gift && (
         <View style={[st.inset, { backgroundColor: color.blueBg }]}>
           <Row gap={8}><Icon name="gift" size={18} tint={color.blue} /><Txt size={14} weight="semibold" tint={color.blue}>{t('giftFor', { n: o.gift.name || '…' })}</Txt></Row>

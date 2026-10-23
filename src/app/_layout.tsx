@@ -71,6 +71,7 @@ function Gate() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="order/[id]" />
           <Stack.Screen name="preorders" />
+          <Stack.Screen name="run" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

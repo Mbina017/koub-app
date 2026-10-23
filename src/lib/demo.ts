@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, StockResult, Tag } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -33,7 +33,7 @@ function ago(hours: number): string {
 }
 
 // Steps taken in demo mode change the invented orders for this session only.
-type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[] };
+type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[]; contact?: { whatsapp: string; call: string; address: string; city: string } };
 const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
   const lines: [number, number][] = kind === 'preorder' ? preorderLines[preorderSeen++ % preorderLines.length] : k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
   const total = Math.round((lines.reduce((s, [p, q]) => s + catalog[p][1] * q, 0) + (kind === 'pickup' ? 0 : kind === 'prepare_gcc' ? 4 : 1.5)) * 1000) / 1000;
@@ -61,7 +61,7 @@ const inView = (o: DemoOrder, view: string, prepare: string) => {
   if (view === 'gifts') return o.kind === 'gift';
   return false;
 };
-const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
+const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, contact, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
 
 function counts(): Record<string, number> {
   const c: Record<string, number> = {};
@@ -133,10 +133,39 @@ function home(period: string): Home {
       whatsapp: { count: 1, order_id: 1036 },
       preorder: c.preorder,
     },
+    work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0) }; })(),
     stock: { low: 2, out: 2 },
     visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
   };
+}
+
+// Delivery details as the store keeps them; edits in demo mode last for the session.
+const areaOf = (o: DemoOrder) => o.tags.find((x) => x.label.startsWith('توصيل · '))?.label.slice(8) ?? 'المنامة';
+function contactOf(o: DemoOrder) {
+  return (o.contact ??= { whatsapp: '+9733' + String(3000000 + o.id * 7919).slice(0, 7), call: '', address: 'بيت ' + (o.id % 40) + ' · طريق ' + (3400 + (o.id % 9)) + ' · مجمع ' + (330 + (o.id % 7)), city: areaOf(o) });
+}
+function editContact(o: DemoOrder, p: Record<string, unknown>, en: boolean) {
+  const digits = String(p.whatsapp ?? '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/\D/g, '');
+  if (digits.length < 8) throw new Error(en ? 'Enter a valid WhatsApp number with its country code, e.g. +973 3XXX XXXX.' : 'اكتب رقم واتساب صحيح مع رمز الدولة، مثل ‎+973 3XXX XXXX‎.');
+  if (p.address !== undefined && !String(p.address).trim()) throw new Error(en ? 'Enter the street address.' : 'اكتب العنوان.');
+  const c = contactOf(o);
+  Object.assign(c, { whatsapp: '+' + (digits.length === 8 ? '973' + digits : digits), call: String(p.call ?? c.call), address: String(p.address ?? c.address).trim(), city: String(p.city ?? c.city).trim() });
+  (o.notes ??= []).push('انعدّلت بيانات التوصيل من التطبيق (تجربة)');
+}
+// The day's delivery run, the store's rules: out for delivery today, plus cash still out.
+function run(): Run {
+  const rows = orders.filter((o) => !o.cancelled && o.kind !== 'pickup' && o.kind !== 'prepare_gcc' && (o.fulfilled || (o.kind === 'done' && o.tags.some((x) => x.label === 'طلع للتوصيل')) || (o.kind === 'cod' && !o.collected && !o.next)))
+    .map((o) => {
+      const c = contactOf(o);
+      const cod = o.kind === 'cod' && !o.collected;
+      const today = o.fulfilled || now - Date.parse(o.created ?? '') < 24 * H;
+      return { id: o.id, number: o.number, name: o.name, area: c.city || 'المنامة', address: c.address, items: o.items, call: c.whatsapp.replace('+', ''), whatsapp: c.whatsapp.replace('+', ''), cod_due: cod ? o.due : null, gift: o.kind === 'gift', today: !!today, map: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.address + ', ' + c.city + ', البحرين') };
+    })
+    .filter((r) => r.today || r.cod_due !== null)
+    .sort((a, b) => a.area.localeCompare(b.area) || Number(a.number) - Number(b.number));
+  const cod = rows.filter((r) => r.cod_due !== null);
+  return { date: new Date().toISOString().slice(0, 10), count: rows.length, cod_total: cod.reduce((sum, r) => sum + (r.cod_due ?? 0), 0), cod_count: cod.length, rows };
 }
 
 function order(id: number): Order {
@@ -154,7 +183,8 @@ function order(id: number): Order {
     id: o.id, number: o.number, status, status_label: o.cancelled ? 'ملغي' : done ? 'Completed' : 'Processing', created: o.created, ago: o.ago, via_staff: false, test: false,
     pickup: o.kind === 'pickup', cod: o.kind === 'cod', preorder: o.kind === 'preorder' && !o.released, fulfilment: done ? 'out_delivery' : null, fulfilment_at: done ? o.created : null, tags: o.tags,
     customer: { name: o.name, initial: o.name.slice(0, 1), phone: '+973 3••• ••' + String(10 + (o.id % 89)), whatsapp: null, call: null, orders: (o.id % 3) + 1, position: (o.id % 3) + 1, spent: Math.round(o.total * ((o.id % 3) + 1) * 1000) / 1000 },
-    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : 'بيت 12 · طريق 3401 · مجمع 334 · المنامة', country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : [contactOf(o).address, contactOf(o).city].filter(Boolean).join(' · '), country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    contact_edit: o.cancelled ? null : { fields: o.kind === 'gift' ? ['whatsapp', 'recipient'] : o.kind === 'pickup' ? ['whatsapp', 'call'] : ['whatsapp', 'call', 'address'], values: { ...contactOf(o), recipient: o.kind === 'gift' ? '+97336000047' : '' }, out_for_delivery: done && o.kind !== 'pickup' },
     gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
     note: o.id % 5 === 0 ? 'لو سمحت التوصيل بعد الساعة 6' : '',
     items,
@@ -197,6 +227,12 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
   if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
   if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
+  if (/^\/orders\/\d+\/contact$/.test(path)) {
+    const o = orders.find((x) => x.id === Number(path.split('/')[2]));
+    if (!o) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    editContact(o, p, p.lang === 'en');
+    return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+  }
   const [, , id, what] = path.split('/');
   const o = orders.find((x) => x.id === Number(id));
   if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
@@ -353,6 +389,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
   if (path === '/preorders') return { groups: preorderGroups() } as T;
+  if (path === '/run') return run() as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {
