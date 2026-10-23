@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, PosToday } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -112,6 +112,11 @@ export const api = {
   unpaid: (s: Session) => get<UnpaidList>(s, '/unpaid'),
   paymentLink: (s: Session, id: number) => post<PaymentLink>(s, '/orders/' + id + '/payment-link', { lang: appLang }),
   unpaidDismiss: (s: Session, id: number) => post<{ ok: boolean }>(s, '/orders/' + id + '/unpaid-dismiss', { lang: appLang }),
+  // Shop till (API 1.5). A sale carries its own `ref`, so sending it again never sells twice.
+  posCatalog: (s: Session) => get<PosCatalog>(s, '/pos/catalog'),
+  posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
+  posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
+  posVoid: (s: Session, id: number) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.

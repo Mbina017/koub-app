@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, View } from 'react-native';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../../lib/session';
@@ -56,6 +57,12 @@ export default function More() {
         {push.on && <Item icon="lock" label={t('quietNight')} sub={t('quietNightHint')} right={<Switch value={push.quiet} disabled={busy} onValueChange={(quiet) => changePush({ ...push, quiet })} trackColor={{ true: color.ink, false: color.line }} />} last />}
       </Card>
       {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+
+      <SectionTitle title={t('pos')} icon="cash" />
+      <Card padded={false}>
+        <Item icon="cash" label={t('posOpen')} sub={t('posOpenHint')} onPress={() => router.push('/pos')} />
+        <Item icon="numbers" label={t('posToday')} onPress={() => router.push('/pos-today')} last />
+      </Card>
 
       <SectionTitle title={t('account')} />
       <Card padded={false}>
