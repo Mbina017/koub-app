@@ -232,10 +232,14 @@ function actions(o: DemoOrder): OrderAction[] {
 
 // ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
 const posSales: PosReceipt[] = [];
+const menuDrinks: [string, number][] = [['سبانش لاتيه', 2.2], ['آيس لاتيه', 2.1], ['أمريكانو', 1.5], ['كرك', 0.8]];
 const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
 function posCatalog(en: boolean): PosCatalog {
   return {
-    products: catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+    products: [
+      ...menuDrinks.map(([name, price], i) => ({ id: 700 + i, name, group: 'drinks' as const, sku: 'MENU-' + i, price, stock: null, image: null })),
+      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+    ],
     methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
   };
 }
@@ -244,7 +248,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => l.id + 'x' + l.qty).sort().join(',');
   const done = posSales.find((s) => (s as PosReceipt & { ref?: string }).ref === ref);
   if (done) return { ...done, repeat: true };
-  const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: catalog[l.id - 100], ...l }));
+  const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: (l.id >= 700 ? [menuDrinks[l.id - 700][0], menuDrinks[l.id - 700][1], null, null] : catalog[l.id - 100]) as (typeof catalog)[number], ...l }));
   if (!lines.length) throw new Error(en ? 'The sale is empty.' : 'البيع فاضي.');
   for (const l of lines) if (l.row && l.row[3] !== null && l.row[3] < l.qty) throw new Error(en ? l.row[0] + ': the store shows ' + l.row[3] + ' in stock. Fix the stock count first.' : l.row[0] + ': المخزون في النظام ' + l.row[3] + '. عدّل المخزون أول.');
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
