@@ -63,6 +63,8 @@ export type Home = {
     whatsapp: { count: number; order_id: number | null };
     preorder: number;
   };
+  // API 1.3: today's work — the delivery run and pre-orders whose stock is in.
+  work?: { run: { count: number; total: number; cod: number }; preorder_ready: number; unpaid?: { count: number; value: number } } | null;
   stock: { low: number; out: number };
   visitors: { visitors: number; pageviews: number; orders: number } | null;
   latest: OrderSummary[];
@@ -111,6 +113,8 @@ export type Order = {
     spent: number | null;
   };
   address: { text: string; country: string };
+  // API 1.3: delivery details this order can change from the app, with their saved values; null when it is closed.
+  contact_edit?: ContactEdit | null;
   gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean } | null;
   note: string;
   items: { name: string; qty: number; total: number; image: string | null; product_id: number; parts: { name: string; qty: number }[] }[];
@@ -165,7 +169,29 @@ export type Product = {
   stock: number | null;
   waiting_alerts: number;
   image: string | null;
+  // API 1.3: stock can change from the app (simple product with tracked stock), and the version it was read at.
+  quick?: boolean;
+  revision?: string;
 };
+export type StockResult = { qty: number; revision: string; state: Product['state'] };
+// API 1.3: open pre-orders grouped by what they wait for.
+export type PreorderGroup = {
+  key: string;
+  name: string;
+  orders: number;
+  qty: number;
+  ready: number;
+  ready_ids: number[];
+  mixed: number;
+  oldest: string | null;
+  ago: string;
+  stock: number | null;
+  product_id: number | null;
+  image: string | null;
+  confirm: string;
+};
+export type PreorderList = { groups: PreorderGroup[] };
+export type ReleaseResult = { updated: number; skipped: { id: number; number: string; reason: string }[] };
 export type ProductList = {
   filter: ProductFilter;
   total: number;
@@ -174,3 +200,15 @@ export type ProductList = {
   counts: Record<ProductFilter, number>;
   products: Product[];
 };
+
+// API 1.3: delivery details from the app.
+export type ContactField = 'whatsapp' | 'call' | 'recipient' | 'address';
+export type ContactEdit = { fields: ContactField[]; values: { whatsapp: string; call: string; recipient: string; address: string; city: string }; out_for_delivery: boolean };
+export type ContactInput = Partial<Record<'whatsapp' | 'call' | 'recipient' | 'address' | 'city', string>>;
+// API 1.3: the day's delivery run, by area.
+export type RunRow = { id: number; number: string; name: string; area: string; address: string; items: string; call: string | null; whatsapp: string | null; cod_due: number | null; gift: boolean; today: boolean; map: string | null };
+export type Run = { date: string; count: number; cod_total: number; cod_count: number; rows: RunRow[] };
+// API 1.3: card payments that did not finish, and the order's own payment link to send from staff WhatsApp.
+export type UnpaidRow = { id: number; number: string; name: string; total: number; items: string; created: string | null; ago: string; status: string; status_label: string; payable: boolean; method: string; reminder: string; opened: boolean; shared: string | null; whatsapp: string | null };
+export type UnpaidList = { count: number; value: number; rows: UnpaidRow[] };
+export type PaymentLink = { url: string; text: string; whatsapp: string | null };

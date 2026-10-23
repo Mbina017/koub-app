@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -17,7 +17,11 @@ type Kind = 'prepare_bh' | 'prepare_gcc' | 'pickup' | 'gift' | 'cod' | 'preorder
 const plan: [Kind, number][] = [
   ['prepare_bh', 0.2], ['prepare_bh', 0.9], ['pickup', 1.6], ['prepare_gcc', 2.4], ['gift', 3.1], ['cod', 4.0],
   ['preorder', 5.5], ['done', 7], ['done', 9], ['cod', 26], ['done', 30], ['done', 49], ['done', 53], ['done', 75],
+  ['preorder', 11], ['preorder', 20], ['preorder', 34], ['preorder', 52],
 ];
+// Pre-orders wait for كوب السيف (5) or كوب جدحفص (7); one waits for both.
+const preorderLines: [number, number][][] = [[[5, 1]], [[5, 2]], [[5, 1], [7, 1]], [[7, 1]], [[5, 1]]];
+let preorderSeen = 0;
 
 const now = Date.now();
 const H = 3600 * 1000;
@@ -29,9 +33,9 @@ function ago(hours: number): string {
 }
 
 // Steps taken in demo mode change the invented orders for this session only.
-type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[] };
+type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[]; contact?: { whatsapp: string; call: string; address: string; city: string } };
 const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
-  const lines: [number, number][] = k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
+  const lines: [number, number][] = kind === 'preorder' ? preorderLines[preorderSeen++ % preorderLines.length] : k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
   const total = Math.round((lines.reduce((s, [p, q]) => s + catalog[p][1] * q, 0) + (kind === 'pickup' ? 0 : kind === 'prepare_gcc' ? 4 : 1.5)) * 1000) / 1000;
   const tags: Tag[] = [];
   if (kind === 'gift') tags.push({ label: 'هدية · تنتظر العنوان', tone: 'blue' });
@@ -57,7 +61,7 @@ const inView = (o: DemoOrder, view: string, prepare: string) => {
   if (view === 'gifts') return o.kind === 'gift';
   return false;
 };
-const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
+const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, contact, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
 
 function counts(): Record<string, number> {
   const c: Record<string, number> = {};
@@ -129,11 +133,48 @@ function home(period: string): Home {
       whatsapp: { count: 1, order_id: 1036 },
       preorder: c.preorder,
     },
+    work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0), unpaid: { count: unpaidList().count, value: unpaidList().value } }; })(),
     stock: { low: 2, out: 2 },
     visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
   };
 }
+
+// Delivery details as the store keeps them; edits in demo mode last for the session.
+const areaOf = (o: DemoOrder) => o.tags.find((x) => x.label.startsWith('توصيل · '))?.label.slice(8) ?? 'المنامة';
+function contactOf(o: DemoOrder) {
+  return (o.contact ??= { whatsapp: '+9733' + String(3000000 + o.id * 7919).slice(0, 7), call: '', address: 'بيت ' + (o.id % 40) + ' · طريق ' + (3400 + (o.id % 9)) + ' · مجمع ' + (330 + (o.id % 7)), city: areaOf(o) });
+}
+function editContact(o: DemoOrder, p: Record<string, unknown>, en: boolean) {
+  const digits = String(p.whatsapp ?? '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/\D/g, '');
+  if (digits.length < 8) throw new Error(en ? 'Enter a valid WhatsApp number with its country code, e.g. +973 3XXX XXXX.' : 'اكتب رقم واتساب صحيح مع رمز الدولة، مثل ‎+973 3XXX XXXX‎.');
+  if (p.address !== undefined && !String(p.address).trim()) throw new Error(en ? 'Enter the street address.' : 'اكتب العنوان.');
+  const c = contactOf(o);
+  Object.assign(c, { whatsapp: '+' + (digits.length === 8 ? '973' + digits : digits), call: String(p.call ?? c.call), address: String(p.address ?? c.address).trim(), city: String(p.city ?? c.city).trim() });
+  (o.notes ??= []).push('انعدّلت بيانات التوصيل من التطبيق (تجربة)');
+}
+// The day's delivery run, the store's rules: out for delivery today, plus cash still out.
+function run(): Run {
+  const rows = orders.filter((o) => !o.cancelled && o.kind !== 'pickup' && o.kind !== 'prepare_gcc' && (o.fulfilled || (o.kind === 'done' && o.tags.some((x) => x.label === 'طلع للتوصيل')) || (o.kind === 'cod' && !o.collected && !o.next)))
+    .map((o) => {
+      const c = contactOf(o);
+      const cod = o.kind === 'cod' && !o.collected;
+      const today = o.fulfilled || now - Date.parse(o.created ?? '') < 24 * H;
+      return { id: o.id, number: o.number, name: o.name, area: c.city || 'المنامة', address: c.address, items: o.items, call: c.whatsapp.replace('+', ''), whatsapp: c.whatsapp.replace('+', ''), cod_due: cod ? o.due : null, gift: o.kind === 'gift', today: !!today, map: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.address + ', ' + c.city + ', البحرين') };
+    })
+    .filter((r) => r.today || r.cod_due !== null)
+    .sort((a, b) => a.area.localeCompare(b.area) || Number(a.number) - Number(b.number));
+  const cod = rows.filter((r) => r.cod_due !== null);
+  return { date: new Date().toISOString().slice(0, 10), count: rows.length, cod_total: cod.reduce((sum, r) => sum + (r.cod_due ?? 0), 0), cod_count: cod.length, rows };
+}
+
+// Card payments that did not finish (invented); payment links and "handled" last for the session.
+const unpaidRows: UnpaidRow[] = [
+  { id: 1052, number: '1052', name: 'هيا م.', total: 17.0, items: '2× كوب المنامة', created: new Date(now - 3 * H).toISOString(), ago: 'قبل 3 ساعات', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'EazyPay card', reminder: 'انرسل تذكير تلقائي', opened: false, shared: null, whatsapp: '97333000052' },
+  { id: 1051, number: '1051', name: 'بدر ع.', total: 15.5, items: '1× طقم كوبين · هدية', created: new Date(now - 20 * H).toISOString(), ago: 'قبل 20 ساعة', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'Benefit', reminder: 'ما انرسل تذكير تلقائي (واحد لكل عميل كل ٤٨ ساعة)', opened: true, shared: null, whatsapp: '97333000051' },
+  { id: 1050, number: '1050', name: 'شوق ح.', total: 9.0, items: '1× كوب السيف', created: new Date(now - 50 * H).toISOString(), ago: 'قبل 2 أيام', status: 'cancelled', status_label: 'ملغي', payable: false, method: 'EazyPay card', reminder: '', opened: false, shared: null, whatsapp: '97333000050' },
+];
+const unpaidList = (): UnpaidList => ({ count: unpaidRows.length, value: unpaidRows.reduce((sum, r) => sum + r.total, 0), rows: unpaidRows });
 
 function order(id: number): Order {
   const o = orders.find((x) => x.id === id) ?? orders[0];
@@ -150,7 +191,8 @@ function order(id: number): Order {
     id: o.id, number: o.number, status, status_label: o.cancelled ? 'ملغي' : done ? 'Completed' : 'Processing', created: o.created, ago: o.ago, via_staff: false, test: false,
     pickup: o.kind === 'pickup', cod: o.kind === 'cod', preorder: o.kind === 'preorder' && !o.released, fulfilment: done ? 'out_delivery' : null, fulfilment_at: done ? o.created : null, tags: o.tags,
     customer: { name: o.name, initial: o.name.slice(0, 1), phone: '+973 3••• ••' + String(10 + (o.id % 89)), whatsapp: null, call: null, orders: (o.id % 3) + 1, position: (o.id % 3) + 1, spent: Math.round(o.total * ((o.id % 3) + 1) * 1000) / 1000 },
-    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : 'بيت 12 · طريق 3401 · مجمع 334 · المنامة', country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : [contactOf(o).address, contactOf(o).city].filter(Boolean).join(' · '), country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    contact_edit: o.cancelled ? null : { fields: o.kind === 'gift' ? ['whatsapp', 'recipient'] : o.kind === 'pickup' ? ['whatsapp', 'call'] : ['whatsapp', 'call', 'address'], values: { ...contactOf(o), recipient: o.kind === 'gift' ? '+97336000047' : '' }, out_for_delivery: done && o.kind !== 'pickup' },
     gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
     note: o.id % 5 === 0 ? 'لو سمحت التوصيل بعد الساعة 6' : '',
     items,
@@ -191,6 +233,25 @@ function actions(o: DemoOrder): OrderAction[] {
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
+  if (/^\/orders\/\d+\/(payment-link|unpaid-dismiss)$/.test(path)) {
+    const [, , id, what] = path.split('/');
+    const i = unpaidRows.findIndex((r) => r.id === Number(id));
+    if (i < 0) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    if (what === 'unpaid-dismiss') { unpaidRows.splice(i, 1); return { ok: true } as T; }
+    const r = unpaidRows[i];
+    if (!r.payable) throw new Error(p.lang === 'en' ? 'This order can no longer be paid from a link.' : 'هالطلب ما عاد ينفع يندفع من رابط.');
+    r.shared = new Date().toISOString();
+    const url = 'https://koubbh.com/continue/demo' + r.id + '/';
+    return { url, text: 'هلا ' + r.name.split(' ')[0] + '، معك KOUB. دفع طلبك #' + r.number + ' ما اكتمل. تقدر تكمل الدفع من هالرابط:\n' + url, whatsapp: r.whatsapp } as T;
+  }
+  if (/^\/orders\/\d+\/contact$/.test(path)) {
+    const o = orders.find((x) => x.id === Number(path.split('/')[2]));
+    if (!o) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    editContact(o, p, p.lang === 'en');
+    return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+  }
   const [, , id, what] = path.split('/');
   const o = orders.find((x) => x.id === Number(id));
   if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
@@ -237,10 +298,43 @@ function bulkChoices(view: string, prepare: string): BulkAction[] {
   return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
 }
 
+// Pre-orders by item, the store's rules: an order waiting for one item only can be released from that item.
+const preKeys = (o: DemoOrder) => [...new Set(o.lines.filter(([i]) => i === 5 || i === 7).map(([i]) => 'p' + (100 + i)))];
+function preorderGroups(): PreorderGroup[] {
+  const open = orders.filter((o) => o.kind === 'preorder' && !o.released && !o.cancelled);
+  const keys = [...new Set(open.flatMap(preKeys))];
+  return keys.map((key) => {
+    const i = Number(key.slice(1)) - 100;
+    const mine = open.filter((o) => preKeys(o).includes(key));
+    const ready = mine.filter((o) => preKeys(o).length === 1).map((o) => o.id);
+    const qty = mine.reduce((sum, o) => sum + o.lines.filter(([x]) => x === i).reduce((a, [, q]) => a + q, 0), 0);
+    const oldest = mine.reduce((a, o) => (o.created && (!a || o.created < a) ? o.created : a), null as string | null);
+    return { key, name: catalog[i][0], orders: mine.length, qty, ready: ready.length, ready_ids: ready, mixed: mine.length - ready.length, oldest, ago: mine.find((o) => o.created === oldest)?.ago ?? '', stock: catalog[i][3], product_id: 100 + i, image: null, confirm: 'وصل مخزون ' + catalog[i][0] + '؟ ' + ready.length + ' طلب ينتقل للتحضير. ما ينرسل شي للعملاء.' };
+  }).sort((a, b) => b.orders - a.orders);
+}
+function releasePreorders(key: string, ids: number[]): ReleaseResult {
+  const ready = preorderGroups().find((g) => g.key === key)?.ready_ids ?? [];
+  const out: ReleaseResult = { updated: 0, skipped: [] };
+  for (const id of ids) {
+    const o = orders.find((x) => x.id === id);
+    if (o && ready.includes(id) && apply(o, 'release_preorder')) out.updated += 1;
+    else out.skipped.push({ id, number: String(id), reason: o && !o.released ? 'ينتظر منتج ثاني كمان. جهّزه من صفحة الطلب.' : 'ما عاد ينتظر.' });
+  }
+  return out;
+}
+function stockChange(id: number, delta: number, en: boolean): StockResult {
+  const row = catalog[id - 100];
+  if (!row || row[3] === null) throw new Error(en ? 'Use the product screen for this product.' : 'عدّل هالمنتج من صفحته.');
+  if (row[3] + delta < 0) throw new Error(en ? 'Only ' + row[3] + ' in stock.' : 'المخزون ' + row[3] + ' بس.');
+  row[3] += delta;
+  const stock = row[3];
+  return { qty: stock, revision: 'demo-' + id + '-' + stock, state: stock === 0 ? 'out' : stock <= 2 ? 'low' : 'ok' };
+}
+
 function products(filter: string, s: string): ProductList {
   const all: Product[] = catalog.map(([name, price, cost, stock], i) => {
     const state = i === 5 ? 'ok' : stock === 0 ? 'out' : stock !== null && stock <= 2 ? 'low' : 'ok';
-    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null };
+    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null, quick: stock !== null, revision: 'demo-' + (100 + i) + '-' + stock };
   });
   const keys = (p: Product) => ['all', p.state === 'draft' ? 'draft' : p.preorder ? 'preorder' : p.state === 'low' || p.state === 'out' ? p.state : ''];
   const c = { all: 0, low: 0, out: 0, preorder: 0, draft: 0 } as ProductList['counts'];
@@ -313,6 +407,9 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
+  if (path === '/preorders') return { groups: preorderGroups() } as T;
+  if (path === '/run') return run() as T;
+  if (path === '/unpaid') return unpaidList() as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {
