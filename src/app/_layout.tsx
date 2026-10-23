@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Platform, View } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { AppState, Platform, Pressable, Text, View } from 'react-native';
+import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
 import { orderFromNotification, useLastAlertTap } from '../lib/push';
 import { StatusBar } from 'expo-status-bar';
@@ -78,6 +79,26 @@ function Gate() {
           <Stack.Screen name="login" />
         </Stack.Protected>
       </Stack>
+    </View>
+  );
+}
+
+// Last resort for a crash while drawing a screen: a calm page instead of a blank one.
+// Plain Text and both languages, because fonts, session and language may be what failed.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { SplashScreen.hideAsync().catch(() => {}); }, []);
+  const details = `${error.name}: ${error.message}\n${(error.stack ?? '').split('\n').slice(0, 8).join('\n')}`;
+  return (
+    <View style={{ flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 }}>
+      <Text style={{ fontSize: 18, fontWeight: '600', color: color.ink, textAlign: 'center' }}>صار خطأ غير متوقع</Text>
+      <Text style={{ fontSize: 15, color: color.muted, textAlign: 'center' }}>Something went wrong</Text>
+      <Pressable onPress={retry} style={{ marginTop: 16, backgroundColor: color.ink, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 }}>
+        <Text style={{ color: color.bg, fontSize: 16, fontWeight: '600' }}>جرّب مرة ثانية · Try again</Text>
+      </Pressable>
+      <Pressable onPress={() => { Clipboard.setStringAsync(details).then(() => setCopied(true)).catch(() => {}); }} style={{ padding: 12 }}>
+        <Text style={{ color: color.muted, fontSize: 13 }}>{copied ? 'تم النسخ · Copied' : 'انسخ تفاصيل الخطأ · Copy error details'}</Text>
+      </Pressable>
     </View>
   );
 }
