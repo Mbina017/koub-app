@@ -123,7 +123,7 @@ export default function Pos() {
         onClose={() => setOpen(false)}
         onDone={() => {
           setCart({});
-          for (const k of ['pos-catalog', 'pos-today', 'pos-books', 'home', 'products']) qc.invalidateQueries({ queryKey: [k] });
+          for (const k of ['pos-catalog', 'pos-today', 'pos-books', 'home', 'products', 'numbers', 'orders']) qc.invalidateQueries({ queryKey: [k] });
         }}
       />
     </View>

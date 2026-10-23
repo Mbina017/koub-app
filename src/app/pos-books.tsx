@@ -17,8 +17,8 @@ import { Icon } from '../components/Icon';
 const newRef = () => 'exp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 // Bahrain's calendar day, as the store counts it.
 const bhDay = (offset = 0) => new Date(Date.now() + 3 * 3600_000 - offset * 86400_000).toISOString().slice(0, 10);
-// "3,5" and Arabic digits are read as 3.5.
-const parseAmount = (s: string) => Number(s.trim().replace(',', '.').replace(/[٠-٩]/g, (c) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))));
+// "3,5", "٣٫٥" and Arabic digits are all read as 3.5.
+const parseAmount = (s: string) => Number(s.trim().replace(/[٫,]/g, '.').replace(/[٠-٩]/g, (c) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))));
 
 export default function PosBooks() {
   const session = useApiSession();
@@ -26,7 +26,8 @@ export default function PosBooks() {
   const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<ShopPeriod>('today');
   const [adding, setAdding] = useState(false);
-  const q = useQuery({ queryKey: ['pos-books', period], queryFn: () => api.posBooks(session, period) });
+  // Keeps the screen (and a half-typed expense) while another period loads.
+  const q = useQuery({ queryKey: ['pos-books', period], queryFn: () => api.posBooks(session, period), placeholderData: (prev) => prev });
   const d = q.data;
   const old = q.error instanceof ApiError && q.error.message === 'no_route';
 
@@ -149,14 +150,16 @@ function Line({ label, sub, value, strong }: { label: string; sub?: string; valu
 function AddExpense({ categories, onDone }: { categories: ShopBooks['categories']; onDone: () => void }) {
   const session = useApiSession();
   const { t, lang } = useSession();
-  const [ref] = useState(newRef);
+  const [ref, setRef] = useState(newRef);
+  // The day is fixed on the first try, so a retry after a lost reply (even past midnight) finds the same line.
+  const [sentDay, setSentDay] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [cat, setCat] = useState<ShopExpenseCat>('stock');
   const [what, setWhat] = useState('');
   const [day, setDay] = useState<0 | 1>(0);
   const value = parseAmount(amount);
   const save = useMutation({
-    mutationFn: () => api.posExpenseAdd(session, { ref, amount: value, cat, label: what.trim(), date: bhDay(day) }),
+    mutationFn: () => { const date = sentDay ?? bhDay(day); setSentDay(date); return api.posExpenseAdd(session, { ref, amount: value, cat, label: what.trim(), date }); },
     onSuccess: onDone,
     onError: (e) => showMessage(t('notUpdated'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
   });
@@ -173,10 +176,10 @@ function AddExpense({ categories, onDone }: { categories: ShopBooks['categories'
         ))}
       </Row>
       <TextInput value={what} onChangeText={setWhat} placeholder={t('booksWhat')} placeholderTextColor={color.faint} maxLength={80} style={input} />
-      <Segmented<'0' | '1'> items={[['0', t('booksDay')], ['1', t('booksYesterday')]]} value={String(day) as '0' | '1'} onChange={(k) => setDay(k === '1' ? 1 : 0)} />
+      <Segmented<'0' | '1'> items={[['0', t('booksDay')], ['1', t('booksYesterday')]]} value={String(day) as '0' | '1'} onChange={(k) => { setDay(k === '1' ? 1 : 0); setSentDay(null); setRef(newRef()); }} />
       <Row gap={8}>
         <Button label={t('notNow')} kind="ghost" onPress={onDone} style={{ flex: 1 }} />
-        <Button label={t('booksSave')} loading={save.isPending} disabled={!(value > 0)} onPress={() => save.mutate()} style={{ flex: 1 }} />
+        <Button label={t('booksSave')} loading={save.isPending} onPress={() => (value > 0 ? save.mutate() : showMessage(t('booksNeedAmount'), ''))} style={{ flex: 1 }} />
       </Row>
     </View>
   );
