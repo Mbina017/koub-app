@@ -93,7 +93,7 @@ export const api = {
   order: (s: Session, id: number) => get<Order>(s, '/orders/' + id),
   numbers: (s: Session, p: { period: NumbersPeriod; from?: string; to?: string }) => get<Numbers>(s, '/numbers', p),
   products: (s: Session, p: { filter: ProductFilter; s?: string; page?: number }) => get<ProductList>(s, '/products', p),
-  push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang }) =>
+  push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang; kinds: ('new_order' | 'unpaid' | 'stock')[] }) =>
     post<{ enabled: boolean; quiet: boolean | null; devices: number }>(s, '/push', p),
   // Each returns the updated order.
   orderAction: (s: Session, id: number, action: ActionKey) => post<Order>(s, '/orders/' + id + '/action', { action, lang: appLang }),
