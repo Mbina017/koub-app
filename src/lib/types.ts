@@ -224,6 +224,8 @@ export type PosSaleInput = {
   discount: number;
   discount_type: 'amount' | 'percent';
   cash_given: number | null;
+  // The total the phone showed; the store refuses the sale if a price changed since.
+  expected_total: number;
   name: string;
   phone: string;
 };
@@ -248,5 +250,5 @@ export type PosToday = {
   count: number;
   total: number;
   by_method: Record<PosMethod, number>;
-  sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number }[];
+  sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean }[];
 };

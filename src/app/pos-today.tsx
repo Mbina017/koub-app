@@ -69,7 +69,7 @@ export default function PosToday() {
                 <Txt size={15} weight="semibold">{'#' + s.number + ' · ' + money(s.total, lang)}</Txt>
                 <Muted size={12}>{[time(s.date, lang), s.method_label, t('posItemsN', { n: s.items })].filter(Boolean).join(' · ')}</Muted>
               </View>
-              {s.void ? <TagChip label={t('posVoided')} tone="red" small /> : (
+              {s.void ? <TagChip label={t('posVoided')} tone="red" small /> : s.voidable === false ? (s.refunded ? <TagChip label={t('posRefunded')} tone="amber" small /> : null) : (
                 <Touch
                   onPress={() => confirmStep({ label: t('posVoid'), confirm: t('posVoidConfirm', { n: s.number }), tone: 'danger' }, t('notNow'), () => cancel.mutate(s.id))}
                   disabled={cancel.isPending}
