@@ -88,7 +88,7 @@ function Gate() {
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const [copied, setCopied] = useState(false);
   useEffect(() => { SplashScreen.hideAsync().catch(() => {}); }, []);
-  const details = `${error.name}: ${error.message}\n${(error.stack ?? '').split('\n').slice(0, 8).join('\n')}`;
+  const details = error instanceof Error ? `${error.name}: ${error.message}\n${(error.stack ?? '').split('\n').slice(0, 8).join('\n')}` : String(error);
   return (
     <View style={{ flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 }}>
       <Text style={{ fontSize: 18, fontWeight: '600', color: color.ink, textAlign: 'center' }}>صار خطأ غير متوقع</Text>
