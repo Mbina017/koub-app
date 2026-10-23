@@ -18,8 +18,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F7F3EC",
-        "foregroundImage": "./assets/icon.png"
+        "backgroundColor": "#D8CEC3",
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "bh.koub.app"
@@ -37,8 +37,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F7F3EC",
-          "image": "./assets/icon.png",
-          "imageWidth": 120
+          "image": "./assets/splash.png",
+          "imageWidth": 240
         }
       ],
       "expo-image",
@@ -47,7 +47,8 @@
         "expo-notifications",
         {
           "color": "#2B241D",
-          "defaultChannel": "orders"
+          "defaultChannel": "orders",
+          "icon": "./assets/notification-icon.png"
         }
       ],
       "expo-status-bar",
