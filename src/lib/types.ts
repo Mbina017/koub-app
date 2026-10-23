@@ -212,3 +212,44 @@ export type Run = { date: string; count: number; cod_total: number; cod_count: n
 export type UnpaidRow = { id: number; number: string; name: string; total: number; items: string; created: string | null; ago: string; status: string; status_label: string; payable: boolean; method: string; reminder: string; opened: boolean; shared: string | null; whatsapp: string | null };
 export type UnpaidList = { count: number; value: number; rows: UnpaidRow[] };
 export type PaymentLink = { url: string; text: string; whatsapp: string | null };
+
+// Shop till (API 1.5).
+export type PosMethod = 'cash' | 'card' | 'benefit';
+// group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
+export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; sku: string; price: number; stock: number | null; image: string | null };
+export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[] };
+export type PosSaleInput = {
+  ref: string;
+  lines: { id: number; qty: number }[];
+  method: PosMethod;
+  discount: number;
+  discount_type: 'amount' | 'percent';
+  cash_given: number | null;
+  // The total the phone showed; the store refuses the sale if a price changed since.
+  expected_total: number;
+  name: string;
+  phone: string;
+};
+export type PosReceipt = {
+  id: number;
+  number: string;
+  status: string;
+  date: string | null;
+  lines: { name: string; qty: number; total: number }[];
+  discount: number;
+  total: number;
+  method: PosMethod;
+  method_label: string;
+  cash_given: number | null;
+  change: number | null;
+  name: string;
+  whatsapp: string | null;
+  voidable: boolean;
+  repeat?: boolean;
+};
+export type PosToday = {
+  count: number;
+  total: number;
+  by_method: Record<PosMethod, number>;
+  sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean }[];
+};

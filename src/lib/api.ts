@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, PosToday } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -53,6 +53,8 @@ async function post<T>(session: Session, path: string, body: Record<string, unkn
   if (res.status === 403) throw new ApiError('forbidden', 'forbidden', 403);
   if (!res.ok) {
     const err = await res.json().catch(() => null);
+    // The koub-tap update with this route is not installed yet.
+    if (res.status === 404 && err?.code === 'rest_no_route') throw new ApiError('not_found', 'no_route', 404);
     // 409: the store refused this step (already done, wrong step, someone else is updating); its message says why.
     if (res.status === 409) throw new ApiError('refused', err?.message ?? 'HTTP 409', 409);
     throw new ApiError(res.status === 404 ? 'not_found' : 'server', err?.message ?? 'HTTP ' + res.status, res.status);
@@ -112,6 +114,11 @@ export const api = {
   unpaid: (s: Session) => get<UnpaidList>(s, '/unpaid'),
   paymentLink: (s: Session, id: number) => post<PaymentLink>(s, '/orders/' + id + '/payment-link', { lang: appLang }),
   unpaidDismiss: (s: Session, id: number) => post<{ ok: boolean }>(s, '/orders/' + id + '/unpaid-dismiss', { lang: appLang }),
+  // Shop till (API 1.5). A sale carries its own `ref`, so sending it again never sells twice.
+  posCatalog: (s: Session) => get<PosCatalog>(s, '/pos/catalog'),
+  posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
+  posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
+  posVoid: (s: Session, id: number) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.
