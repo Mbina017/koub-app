@@ -306,20 +306,26 @@ function AddressLink({ o }: { o: Order }) {
   const qc = useQueryClient();
   const l = o.address_link!;
   const first = o.customer.name.split(' ')[0];
-  const text = l.lang === 'en'
-    ? 'Hi ' + first + ', this is KOUB. Your order #' + o.number + ' is confirmed and paid. Please add your delivery address here:\n' + l.link
-    : 'هلا ' + first + '، معك KOUB. طلبك رقم #' + o.number + ' تأكد وانحسب مدفوع. أضف عنوان التوصيل من هالرابط:\n' + l.link;
-  const resend = useMutation({
-    mutationFn: () => api.staffResendLink(session, o.id),
-    onSuccess: (r) => { tap(); showMessage(t('newOrder'), r.message_state === 'sent' ? t('linkSent') : t('linkNotSent')); qc.invalidateQueries({ queryKey: ['order', String(o.id)] }); },
+  const text = (url: string) => l.lang === 'en'
+    ? 'Hi ' + first + ', this is KOUB. Your order #' + o.number + ' is confirmed and paid. Please add your delivery address here:\n' + url
+    : 'هلا ' + first + '، معك KOUB. طلبك رقم #' + o.number + ' تأكد وانحسب مدفوع. أضف عنوان التوصيل من هالرابط:\n' + url;
+  // The store keeps no copy of a link, so each send makes a fresh one (any older link stops working).
+  const link = useMutation({
+    mutationFn: (send: boolean) => api.staffResendLink(session, o.id, send),
+    onSuccess: (r, send) => {
+      tap();
+      qc.invalidateQueries({ queryKey: ['order', String(o.id)] });
+      if (send) showMessage(t('newOrder'), r.message_state === 'sent' ? t('linkSent') : t('linkNotSent'));
+      else if (r.link) Linking.openURL('https://wa.me/' + o.customer.whatsapp + '?text=' + encodeURIComponent(text(r.link))).catch(() => {});
+    },
     onError: (e) => showMessage(t('orderNotSaved'), e.message),
   });
   return (
     <View style={[st.inset, { backgroundColor: color.amberBg, gap: 8 }]}>
       <Txt size={13} weight="semibold" tint={color.amber}>{l.message === 'sent' ? t('linkSent') : t('linkNotSent')}</Txt>
       <Row gap={8}>
-        <Action icon="whatsapp" label={t('sendLinkWa')} disabled={!o.customer.whatsapp || !l.link} onPress={() => Linking.openURL('https://wa.me/' + o.customer.whatsapp + '?text=' + encodeURIComponent(text)).catch(() => {})} />
-        <Action icon="bell" label={resend.isPending ? '…' : t('resendLink')} disabled={resend.isPending} onPress={() => resend.mutate()} />
+        <Action icon="whatsapp" label={t('sendLinkWa')} disabled={!o.customer.whatsapp || link.isPending} onPress={() => link.mutate(false)} />
+        <Action icon="bell" label={link.isPending ? '…' : t('resendLink')} disabled={link.isPending} onPress={() => link.mutate(true)} />
       </Row>
     </View>
   );

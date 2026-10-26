@@ -126,7 +126,8 @@ export const api = {
   // Orders staff place for a customer (API 1.8). The order carries its own `ref`, so sending it again never makes two.
   staffQuote: (s: Session, q: Pick<StaffOrderInput, 'lines' | 'fulfilment' | 'country'>) => post<StaffQuote>(s, '/orders/quote', { ...q, lang: appLang }),
   staffOrder: (s: Session, o: StaffOrderInput) => post<StaffOrder>(s, '/orders/create', { ...o, lang: appLang }),
-  staffResendLink: (s: Session, id: number) => post<StaffOrder>(s, '/orders/' + id + '/address-link', { lang: appLang }),
+  // A fresh link (the old one stops working): `send` has the store message it; otherwise staff send it themselves.
+  staffResendLink: (s: Session, id: number, send = true) => post<StaffOrder>(s, '/orders/' + id + '/address-link', { send, lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.

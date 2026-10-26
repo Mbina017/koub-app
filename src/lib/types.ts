@@ -119,7 +119,7 @@ export type Order = {
   contact_edit?: ContactEdit | null;
   gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean } | null;
   // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
-  address_link?: { link: string; message: string; lang: string } | null;
+  address_link?: { message: string; lang: string } | null;
   note: string;
   items: { name: string; qty: number; total: number; image: string | null; product_id: number; parts: { name: string; qty: number }[] }[];
   totals: { discount: number; fees: { name: string; total: number }[]; shipping: number; refunded: number; total: number };
