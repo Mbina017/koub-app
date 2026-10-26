@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -123,6 +123,11 @@ export const api = {
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),
   posExpenseAdd: (s: Session, e: ShopExpenseInput) => post<{ entry: ShopExpense; repeat?: boolean }>(s, '/pos/expenses', { ...e, lang: appLang }),
   posExpenseRemove: (s: Session, date: string, id: string) => post<{ ok: boolean }>(s, '/pos/expenses/remove', { date, id, lang: appLang }),
+  // Orders staff place for a customer (API 1.8). The order carries its own `ref`, so sending it again never makes two.
+  staffQuote: (s: Session, q: Pick<StaffOrderInput, 'lines' | 'fulfilment' | 'country'>) => post<StaffQuote>(s, '/orders/quote', { ...q, lang: appLang }),
+  staffOrder: (s: Session, o: StaffOrderInput) => post<StaffOrder>(s, '/orders/create', { ...o, lang: appLang }),
+  // A fresh link (the old one stops working): `send` has the store message it; otherwise staff send it themselves.
+  staffResendLink: (s: Session, id: number, send = true) => post<StaffOrder>(s, '/orders/' + id + '/address-link', { send, lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.
