@@ -118,6 +118,8 @@ export type Order = {
   // API 1.3: delivery details this order can change from the app, with their saved values; null when it is closed.
   contact_edit?: ContactEdit | null;
   gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean } | null;
+  // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
+  address_link?: { link: string; message: string; lang: string } | null;
   note: string;
   items: { name: string; qty: number; total: number; image: string | null; product_id: number; parts: { name: string; qty: number }[] }[];
   totals: { discount: number; fees: { name: string; total: number }[]; shipping: number; refunded: number; total: number };
@@ -217,6 +219,17 @@ export type PaymentLink = { url: string; text: string; whatsapp: string | null }
 
 // Shop till (API 1.5).
 export type PosMethod = 'cash' | 'card' | 'benefit';
+// An order staff place for a customer (API 1.8): paid, and for delivery the customer adds the address from a WhatsApp link.
+export type StaffMethod = 'cash' | 'card' | 'benefit' | 'transfer';
+export type StaffOrderInput = {
+  ref: string; lines: { id: number; qty: number }[]; name: string; phone: string;
+  fulfilment: 'delivery' | 'pickup'; country: string; method: StaffMethod; message_lang: Lang; expected_total: number | null; note: string;
+};
+export type StaffOrder = {
+  id: number; number: string; total: number; method_label: string; name: string; whatsapp: string; pickup: boolean;
+  address_state: '' | 'awaiting_address' | 'received'; message_state: '' | 'sent' | 'waiting_for_template' | 'failed' | 'not_sent'; link: string | null; lang: string; repeat?: boolean;
+};
+export type StaffQuote = { subtotal: number; delivery: number | null; total: number | null };
 // group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
 export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; sku: string; price: number; stock: number | null; image: string | null };
 export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[] };

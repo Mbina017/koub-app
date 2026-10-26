@@ -245,7 +245,7 @@ function Customer({ o }: { o: Order }) {
   const { t, lang } = useSession();
   const [copied, setCopied] = useState(false);
   const c = o.customer;
-  const address = o.pickup ? t('pickupFromKoub') : o.gift?.waiting_address ? t('waitingRecipient') : o.address.text || t('noAddress');
+  const address = o.pickup ? t('pickupFromKoub') : o.gift?.waiting_address ? t('waitingRecipient') : o.address_link ? t('waitingCustomerAddress') : o.address.text || t('noAddress');
   const copyAll = async () => {
     await Clipboard.setStringAsync([o.gift ? o.gift.name : c.name, o.pickup ? '' : o.address.text].filter(Boolean).join('\n'));
     tap('select');
@@ -278,6 +278,7 @@ function Customer({ o }: { o: Order }) {
           {!o.pickup && !o.gift?.waiting_address && <Muted size={12}>{o.address.country}</Muted>}
         </View>
       </Row>
+      {o.address_link && <AddressLink o={o} />}
       {o.contact_edit && <ContactEditor o={o} edit={o.contact_edit} />}
       {o.gift && (
         <View style={[st.inset, { backgroundColor: color.blueBg }]}>
@@ -294,6 +295,33 @@ function Customer({ o }: { o: Order }) {
         </View>
       )}
     </Card>
+  );
+}
+
+// A staff order waiting for the customer's address: send the link again from the staff phone, or have the store
+// send a fresh one (the old link stops working).
+function AddressLink({ o }: { o: Order }) {
+  const session = useApiSession();
+  const { t } = useSession();
+  const qc = useQueryClient();
+  const l = o.address_link!;
+  const first = o.customer.name.split(' ')[0];
+  const text = l.lang === 'en'
+    ? 'Hi ' + first + ', this is KOUB. Your order #' + o.number + ' is confirmed and paid. Please add your delivery address here:\n' + l.link
+    : 'هلا ' + first + '، معك KOUB. طلبك رقم #' + o.number + ' تأكد وانحسب مدفوع. أضف عنوان التوصيل من هالرابط:\n' + l.link;
+  const resend = useMutation({
+    mutationFn: () => api.staffResendLink(session, o.id),
+    onSuccess: (r) => { tap(); showMessage(t('newOrder'), r.message_state === 'sent' ? t('linkSent') : t('linkNotSent')); qc.invalidateQueries({ queryKey: ['order', String(o.id)] }); },
+    onError: (e) => showMessage(t('orderNotSaved'), e.message),
+  });
+  return (
+    <View style={[st.inset, { backgroundColor: color.amberBg, gap: 8 }]}>
+      <Txt size={13} weight="semibold" tint={color.amber}>{l.message === 'sent' ? t('linkSent') : t('linkNotSent')}</Txt>
+      <Row gap={8}>
+        <Action icon="whatsapp" label={t('sendLinkWa')} disabled={!o.customer.whatsapp || !l.link} onPress={() => Linking.openURL('https://wa.me/' + o.customer.whatsapp + '?text=' + encodeURIComponent(text)).catch(() => {})} />
+        <Action icon="bell" label={resend.isPending ? '…' : t('resendLink')} disabled={resend.isPending} onPress={() => resend.mutate()} />
+      </Row>
+    </View>
   );
 }
 

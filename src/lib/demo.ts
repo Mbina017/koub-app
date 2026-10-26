@@ -332,6 +332,20 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/orders/quote' || path === '/orders/create') {
+    // Demo only: store prices, Bahrain delivery free from 14 like the store; nothing is sent to anyone.
+    const en = p.lang === 'en';
+    const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: catalog[l.id - 100], qty: l.qty })).filter((l) => l.row);
+    if (!lines.length) throw new Error(en ? 'The order is empty.' : 'الطلب فاضي.');
+    const sub = Math.round(lines.reduce((s, l) => s + l.row[1] * l.qty, 0) * 1000) / 1000;
+    const delivery = p.fulfilment === 'pickup' ? 0 : p.country === 'BH' ? (sub >= 14 ? 0 : 2) : 4.5;
+    if (path === '/orders/quote') return { subtotal: sub, delivery, total: sub + delivery } as T;
+    if (!String(p.name ?? '').trim()) throw new Error(en ? 'Enter the customer’s name.' : 'اكتب اسم الزبون.');
+    const pickup = p.fulfilment === 'pickup';
+    return { id: 990, number: '990', total: sub + delivery, method_label: String(p.method), name: String(p.name), whatsapp: String(p.phone).replace(/\D/g, ''), pickup,
+      address_state: pickup ? '' : 'awaiting_address', message_state: pickup ? '' : 'sent', link: pickup ? null : 'https://koubbh.com/address/#' + 'a'.repeat(64), lang: String(p.message_lang ?? 'ar') } as T;
+  }
+  if (/^\/orders\/\d+\/address-link$/.test(path)) return { id: 990, number: '990', total: 0, method_label: '', name: '', whatsapp: '', pickup: false, address_state: 'awaiting_address', message_state: 'sent', link: 'https://koubbh.com/address/#' + 'b'.repeat(64), lang: 'ar' } as T;
   if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en') as T;
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
   if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }

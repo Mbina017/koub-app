@@ -31,6 +31,7 @@ const paths = {
   edit: <><Path d="M4 20h4L19 9l-4-4L4 16z" /><Path d="M13.5 6.5l4 4" /></>,
   logout: <><Path d="M10 5H5v14h5" /><Path d="M14 8l4 4-4 4M18 12H9" /></>,
   close: <Path d="M6 6l12 12M18 6L6 18" />,
+  plus: <Path d="M12 5v14M5 12h14" />,
   spark: <Path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />,
 } as const;
 export type IconName = keyof typeof paths;

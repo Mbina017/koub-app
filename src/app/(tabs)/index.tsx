@@ -32,6 +32,10 @@ export default function Home() {
           <Icon name="cash" size={18} tint={color.bg} />
           <Txt size={14} weight="semibold" tint={color.bg}>{t('pos')}</Txt>
         </Touch>
+        {/* An order for a customer who can't order on the website. */}
+        <Touch onPress={() => router.push('/order-new')} style={st.newOrder} accessibilityLabel={t('newOrder')}>
+          <Icon name="plus" size={20} />
+        </Touch>
         <Touch onPress={() => router.push('/more')} style={st.avatar} accessibilityLabel={t('account')}>
           <Txt size={16} weight="semibold" tint={color.bg} center>{me?.initial ?? 'K'}</Txt>
         </Touch>
@@ -196,6 +200,7 @@ const st = StyleSheet.create({
   shop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: space.lg, padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
   till: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: color.ink },
+  newOrder: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center' },
   delta: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, justifyContent: 'space-between' },
   tile: { width: '48.2%', minHeight: 128, backgroundColor: color.surface, borderRadius: radius.lg, padding: space.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, gap: 2 },
