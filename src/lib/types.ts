@@ -299,7 +299,8 @@ export type ShopBooks = {
 export type ShopExpenseInput = { ref: string; amount: number; cat: ShopExpenseCat; label: string; date: string };
 // API 1.9: changing the items. Lines in the order keep the price paid (`unit`); a set lists its mugs per set.
 export type ItemPart = { name: string; qty: number };
-export type ItemsEditLine = { item_id: number; product_id: number; name: string; qty: number; unit: number; set_size: number; parts: ItemPart[] };
-export type ItemsEdit = { lines: ItemsEditLine[]; mugs: string[]; sets: Record<string, number>; cod: boolean; total: number };
+export type ItemsEditLine = { item_id: number; product_id: number; name: string; qty: number; total: number; unit: number; set_size: number; parts: ItemPart[] };
+// `cod`: cash on delivery not collected yet. `owed`: owed back from earlier changes. `free`: differences given free so far.
+export type ItemsEdit = { lines: ItemsEditLine[]; mugs: string[]; sets: Record<string, number>; backorders: number[]; cod: boolean; total: number; owed: number; free: number };
 export type ItemsMethod = StaffMethod | 'free';
 export type ItemsInput = { lines: { item_id?: number; id?: number; qty: number; parts?: ItemPart[] }[]; expected_total: number | null; method: ItemsMethod | '' };
