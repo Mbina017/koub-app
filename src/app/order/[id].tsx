@@ -362,7 +362,9 @@ function InstagramGift({ o, ig }: { o: Order; ig: GiftInstagram }) {
       <Txt size={14} weight="semibold" tint={ig.sent ? color.green : color.amber}>{ig.sent ? t('igSent') : t('igToSend', { h: handle })}</Txt>
       {!ig.sent && <Muted size={12}>{t('igSteps')}</Muted>}
       <Row gap={8}>
-        <Action icon={copied ? 'check' : 'copy'} label={link.isPending ? '…' : t('igCopy')} disabled={link.isPending} onPress={() => link.mutate()} />
+        {/* Each copy makes a new link and the old one stops working: after "Sent", ask first so the recipient's link is not broken by mistake. */}
+        <Action icon={copied ? 'check' : 'copy'} label={link.isPending ? '…' : ig.sent ? t('igNewLink') : t('igCopy')} disabled={link.isPending}
+          onPress={() => (ig.sent ? confirmStep({ label: t('igNewLink'), confirm: t('igNewLinkQ'), tone: 'danger' }, t('notNow'), () => link.mutate()) : link.mutate())} />
         <Action icon="external" label={t('igOpen')} onPress={() => Linking.openURL(ig.url).catch(() => {})} />
       </Row>
       {!ig.sent && (
