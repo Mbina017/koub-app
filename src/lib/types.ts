@@ -120,7 +120,8 @@ export type Order = {
   // API 1.9: what the order holds while it can still be changed, and any amount owed back after a change.
   items_edit?: ItemsEdit | null;
   refund_owed?: number | null;
-  gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean } | null;
+  // API 1.10: `instagram` when KOUB reaches the recipient on Instagram (staff send the address link by hand).
+  gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean; instagram?: GiftInstagram | null } | null;
   // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
   address_link?: { message: string; lang: string } | null;
   note: string;
@@ -304,3 +305,6 @@ export type ItemsEditLine = { item_id: number; product_id: number; name: string;
 export type ItemsEdit = { lines: ItemsEditLine[]; mugs: string[]; sets: Record<string, number>; backorders: number[]; cod: boolean; total: number; owed: number; free: number };
 export type ItemsMethod = StaffMethod | 'free';
 export type ItemsInput = { lines: { item_id?: number; id?: number; qty: number; parts?: ItemPart[] }[]; expected_total: number | null; method: ItemsMethod | '' };
+// API 1.10: a gift recipient KOUB messages on Instagram. `waiting`: still needs the message (paid, no address yet).
+export type GiftInstagram = { handle: string; url: string; sent: string | null; waiting: boolean };
+export type GiftInstagramLink = { link: string; handle: string; name: string; sender: string; message: string };
