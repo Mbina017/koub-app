@@ -290,6 +290,7 @@ function Customer({ o }: { o: Order }) {
         </View>
       )}
       {o.gift?.instagram?.waiting && <InstagramGift o={o} ig={o.gift.instagram} />}
+      {o.gift?.buyer_sends && o.gift.waiting_address && <View style={[st.inset, { backgroundColor: color.sunken }]}><Muted size={13}>{t('buyerSendsLink')}</Muted></View>}
       {!!o.note && (
         <View style={[st.inset, { backgroundColor: color.sunken }]}>
           <Muted size={12}>{t('customerNote')}</Muted>
