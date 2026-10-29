@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -53,6 +53,8 @@ async function post<T>(session: Session, path: string, body: Record<string, unkn
   if (res.status === 403) throw new ApiError('forbidden', 'forbidden', 403);
   if (!res.ok) {
     const err = await res.json().catch(() => null);
+    // The koub-tap update with this route is not installed yet.
+    if (res.status === 404 && err?.code === 'rest_no_route') throw new ApiError('not_found', 'no_route', 404);
     // 409: the store refused this step (already done, wrong step, someone else is updating); its message says why.
     if (res.status === 409) throw new ApiError('refused', err?.message ?? 'HTTP 409', 409);
     throw new ApiError(res.status === 404 ? 'not_found' : 'server', err?.message ?? 'HTTP ' + res.status, res.status);
@@ -93,11 +95,45 @@ export const api = {
   order: (s: Session, id: number) => get<Order>(s, '/orders/' + id),
   numbers: (s: Session, p: { period: NumbersPeriod; from?: string; to?: string }) => get<Numbers>(s, '/numbers', p),
   products: (s: Session, p: { filter: ProductFilter; s?: string; page?: number }) => get<ProductList>(s, '/products', p),
-  push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang }) =>
-    post<{ enabled: boolean; quiet: boolean | null; devices: number }>(s, '/push', p),
+  push: (s: Credentials, p: { token: string; platform: 'ios' | 'android'; enabled: boolean; quiet: boolean; lang: Lang; kinds: ('new_order' | 'unpaid' | 'stock')[] }) =>
+    post<{ enabled: boolean; quiet: boolean | null; kinds?: ('new_order' | 'unpaid' | 'stock')[] | null; devices: number }>(s, '/push', p),
   // Each returns the updated order.
   orderAction: (s: Session, id: number, action: ActionKey) => post<Order>(s, '/orders/' + id + '/action', { action, lang: appLang }),
+  // The dashboard's shipping slips as one HTML document (API 1.2), to print from the phone.
+  slips: (s: Session, ids: number[]) => get<{ count: number; html: string }>(s, '/orders/slips', { ids: ids.join(',') }),
+  ordersBulk: (s: Session, ids: number[], action: BulkKey) => post<BulkResult>(s, '/orders/bulk', { ids, action, lang: appLang }),
   orderNote: (s: Session, id: number, note: string) => post<Order>(s, '/orders/' + id + '/note', { note, lang: appLang }),
+  // API 1.3: pre-orders by item, and stock from the phone.
+  preorders: (s: Session) => get<PreorderList>(s, '/preorders'),
+  preordersRelease: (s: Session, key: string, ids: number[]) => post<ReleaseResult>(s, '/preorders/release', { key, ids, lang: appLang }),
+  productStock: (s: Session, id: number, delta: number, revision: string) => post<StockResult>(s, '/products/' + id + '/stock', { delta, revision, lang: appLang }),
+  // API 1.3: the delivery run and delivery details.
+  run: (s: Session) => get<Run>(s, '/run'),
+  orderContact: (s: Session, id: number, input: ContactInput) => post<Order>(s, '/orders/' + id + '/contact', { ...input, lang: appLang }),
+  // API 1.9: change the items (the store checks stock and the total), and clear an amount owed back once refunded.
+  orderItems: (s: Session, id: number, input: ItemsInput) => post<Order>(s, '/orders/' + id + '/items', { ...input, lang: appLang }),
+  refundOwedDone: (s: Session, id: number) => post<Order>(s, '/orders/' + id + '/refund-owed', { lang: appLang }),
+  // API 1.10: a fresh private address link for the Instagram message (any older link stops working), and "sent".
+  giftInstagramLink: (s: Session, id: number) => post<GiftInstagramLink>(s, '/orders/' + id + '/gift-instagram-link', { lang: appLang }),
+  giftInstagramSent: (s: Session, id: number) => post<Order>(s, '/orders/' + id + '/gift-instagram-sent', { lang: appLang }),
+  // API 1.3: unfinished payments. Nothing is sent by the store; the app opens WhatsApp with the link filled in.
+  unpaid: (s: Session) => get<UnpaidList>(s, '/unpaid'),
+  paymentLink: (s: Session, id: number) => post<PaymentLink>(s, '/orders/' + id + '/payment-link', { lang: appLang }),
+  unpaidDismiss: (s: Session, id: number) => post<{ ok: boolean }>(s, '/orders/' + id + '/unpaid-dismiss', { lang: appLang }),
+  // Shop till (API 1.5). A sale carries its own `ref`, so sending it again never sells twice.
+  posCatalog: (s: Session) => get<PosCatalog>(s, '/pos/catalog'),
+  posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
+  posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
+  posVoid: (s: Session, id: number) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { lang: appLang }),
+  // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
+  posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),
+  posExpenseAdd: (s: Session, e: ShopExpenseInput) => post<{ entry: ShopExpense; repeat?: boolean }>(s, '/pos/expenses', { ...e, lang: appLang }),
+  posExpenseRemove: (s: Session, date: string, id: string) => post<{ ok: boolean }>(s, '/pos/expenses/remove', { date, id, lang: appLang }),
+  // Orders staff place for a customer (API 1.8). The order carries its own `ref`, so sending it again never makes two.
+  staffQuote: (s: Session, q: Pick<StaffOrderInput, 'lines' | 'fulfilment' | 'country'>) => post<StaffQuote>(s, '/orders/quote', { ...q, lang: appLang }),
+  staffOrder: (s: Session, o: StaffOrderInput) => post<StaffOrder>(s, '/orders/create', { ...o, lang: appLang }),
+  // A fresh link (the old one stops working): `send` has the store message it; otherwise staff send it themselves.
+  staffResendLink: (s: Session, id: number, send = true) => post<StaffOrder>(s, '/orders/' + id + '/address-link', { send, lang: appLang }),
 };
 
 // The dashboard order screen, for stores without the order actions API and for refunds.

@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -17,7 +17,11 @@ type Kind = 'prepare_bh' | 'prepare_gcc' | 'pickup' | 'gift' | 'cod' | 'preorder
 const plan: [Kind, number][] = [
   ['prepare_bh', 0.2], ['prepare_bh', 0.9], ['pickup', 1.6], ['prepare_gcc', 2.4], ['gift', 3.1], ['cod', 4.0],
   ['preorder', 5.5], ['done', 7], ['done', 9], ['cod', 26], ['done', 30], ['done', 49], ['done', 53], ['done', 75],
+  ['preorder', 11], ['preorder', 20], ['preorder', 34], ['preorder', 52],
 ];
+// Pre-orders wait for كوب السيف (5) or كوب جدحفص (7); one waits for both.
+const preorderLines: [number, number][][] = [[[5, 1]], [[5, 2]], [[5, 1], [7, 1]], [[7, 1]], [[5, 1]]];
+let preorderSeen = 0;
 
 const now = Date.now();
 const H = 3600 * 1000;
@@ -29,9 +33,9 @@ function ago(hours: number): string {
 }
 
 // Steps taken in demo mode change the invented orders for this session only.
-type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[] };
+type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[]; contact?: { whatsapp: string; call: string; address: string; city: string } };
 const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
-  const lines: [number, number][] = k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
+  const lines: [number, number][] = kind === 'preorder' ? preorderLines[preorderSeen++ % preorderLines.length] : k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
   const total = Math.round((lines.reduce((s, [p, q]) => s + catalog[p][1] * q, 0) + (kind === 'pickup' ? 0 : kind === 'prepare_gcc' ? 4 : 1.5)) * 1000) / 1000;
   const tags: Tag[] = [];
   if (kind === 'gift') tags.push({ label: 'هدية · تنتظر العنوان', tone: 'blue' });
@@ -57,7 +61,7 @@ const inView = (o: DemoOrder, view: string, prepare: string) => {
   if (view === 'gifts') return o.kind === 'gift';
   return false;
 };
-const strip = ({ kind, lines, fulfilled, collected, cancelled, released, notes, ...o }: DemoOrder): OrderSummary => o;
+const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, contact, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
 
 function counts(): Record<string, number> {
   const c: Record<string, number> = {};
@@ -129,11 +133,49 @@ function home(period: string): Home {
       whatsapp: { count: 1, order_id: 1036 },
       preorder: c.preorder,
     },
+    work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0), unpaid: { count: unpaidList().count, value: unpaidList().value } }; })(),
     stock: { low: 2, out: 2 },
     visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
+    shop: (() => { const b = posBooks(period === '7days' ? '7days' : period, false); return { sales: b.sales, count: b.count, expenses: b.expenses, profit: b.profit, exact: b.exact }; })(),
   };
 }
+
+// Delivery details as the store keeps them; edits in demo mode last for the session.
+const areaOf = (o: DemoOrder) => o.tags.find((x) => x.label.startsWith('توصيل · '))?.label.slice(8) ?? 'المنامة';
+function contactOf(o: DemoOrder) {
+  return (o.contact ??= { whatsapp: '+9733' + String(3000000 + o.id * 7919).slice(0, 7), call: '', address: 'بيت ' + (o.id % 40) + ' · طريق ' + (3400 + (o.id % 9)) + ' · مجمع ' + (330 + (o.id % 7)), city: areaOf(o) });
+}
+function editContact(o: DemoOrder, p: Record<string, unknown>, en: boolean) {
+  const digits = String(p.whatsapp ?? '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/\D/g, '');
+  if (digits.length < 8) throw new Error(en ? 'Enter a valid WhatsApp number with its country code, e.g. +973 3XXX XXXX.' : 'اكتب رقم واتساب صحيح مع رمز الدولة، مثل ‎+973 3XXX XXXX‎.');
+  if (p.address !== undefined && !String(p.address).trim()) throw new Error(en ? 'Enter the street address.' : 'اكتب العنوان.');
+  const c = contactOf(o);
+  Object.assign(c, { whatsapp: '+' + (digits.length === 8 ? '973' + digits : digits), call: String(p.call ?? c.call), address: String(p.address ?? c.address).trim(), city: String(p.city ?? c.city).trim() });
+  (o.notes ??= []).push('انعدّلت بيانات التوصيل من التطبيق (تجربة)');
+}
+// The day's delivery run, the store's rules: out for delivery today, plus cash still out.
+function run(): Run {
+  const rows = orders.filter((o) => !o.cancelled && o.kind !== 'pickup' && o.kind !== 'prepare_gcc' && (o.fulfilled || (o.kind === 'done' && o.tags.some((x) => x.label === 'طلع للتوصيل')) || (o.kind === 'cod' && !o.collected && !o.next)))
+    .map((o) => {
+      const c = contactOf(o);
+      const cod = o.kind === 'cod' && !o.collected;
+      const today = o.fulfilled || now - Date.parse(o.created ?? '') < 24 * H;
+      return { id: o.id, number: o.number, name: o.name, area: c.city || 'المنامة', address: c.address, items: o.items, call: c.whatsapp.replace('+', ''), whatsapp: c.whatsapp.replace('+', ''), cod_due: cod ? o.due : null, gift: o.kind === 'gift', today: !!today, map: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.address + ', ' + c.city + ', البحرين') };
+    })
+    .filter((r) => r.today || r.cod_due !== null)
+    .sort((a, b) => a.area.localeCompare(b.area) || Number(a.number) - Number(b.number));
+  const cod = rows.filter((r) => r.cod_due !== null);
+  return { date: new Date().toISOString().slice(0, 10), count: rows.length, cod_total: cod.reduce((sum, r) => sum + (r.cod_due ?? 0), 0), cod_count: cod.length, rows };
+}
+
+// Card payments that did not finish (invented); payment links and "handled" last for the session.
+const unpaidRows: UnpaidRow[] = [
+  { id: 1052, number: '1052', name: 'هيا م.', total: 17.0, items: '2× كوب المنامة', created: new Date(now - 3 * H).toISOString(), ago: 'قبل 3 ساعات', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'EazyPay card', reminder: 'انرسل تذكير تلقائي', opened: false, shared: null, whatsapp: '97333000052' },
+  { id: 1051, number: '1051', name: 'بدر ع.', total: 15.5, items: '1× طقم كوبين · هدية', created: new Date(now - 20 * H).toISOString(), ago: 'قبل 20 ساعة', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'Benefit', reminder: 'ما انرسل تذكير تلقائي (واحد لكل عميل كل ٤٨ ساعة)', opened: true, shared: null, whatsapp: '97333000051' },
+  { id: 1050, number: '1050', name: 'شوق ح.', total: 9.0, items: '1× كوب السيف', created: new Date(now - 50 * H).toISOString(), ago: 'قبل 2 أيام', status: 'cancelled', status_label: 'ملغي', payable: false, method: 'EazyPay card', reminder: '', opened: false, shared: null, whatsapp: '97333000050' },
+];
+const unpaidList = (): UnpaidList => ({ count: unpaidRows.length, value: unpaidRows.reduce((sum, r) => sum + r.total, 0), rows: unpaidRows });
 
 function order(id: number): Order {
   const o = orders.find((x) => x.id === id) ?? orders[0];
@@ -150,7 +192,8 @@ function order(id: number): Order {
     id: o.id, number: o.number, status, status_label: o.cancelled ? 'ملغي' : done ? 'Completed' : 'Processing', created: o.created, ago: o.ago, via_staff: false, test: false,
     pickup: o.kind === 'pickup', cod: o.kind === 'cod', preorder: o.kind === 'preorder' && !o.released, fulfilment: done ? 'out_delivery' : null, fulfilment_at: done ? o.created : null, tags: o.tags,
     customer: { name: o.name, initial: o.name.slice(0, 1), phone: '+973 3••• ••' + String(10 + (o.id % 89)), whatsapp: null, call: null, orders: (o.id % 3) + 1, position: (o.id % 3) + 1, spent: Math.round(o.total * ((o.id % 3) + 1) * 1000) / 1000 },
-    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : 'بيت 12 · طريق 3401 · مجمع 334 · المنامة', country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : [contactOf(o).address, contactOf(o).city].filter(Boolean).join(' · '), country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    contact_edit: o.cancelled ? null : { fields: o.kind === 'gift' ? ['whatsapp', 'recipient'] : o.kind === 'pickup' ? ['whatsapp', 'call'] : ['whatsapp', 'call', 'address'], values: { ...contactOf(o), recipient: o.kind === 'gift' ? '+97336000047' : '' }, out_for_delivery: done && o.kind !== 'pickup' },
     gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
     note: o.id % 5 === 0 ? 'لو سمحت التوصيل بعد الساعة 6' : '',
     items,
@@ -171,7 +214,8 @@ function order(id: number): Order {
 }
 
 // The same choices the store offers (see koub_app_order_actions), with its Arabic wording.
-const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب' };
+const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب', undo_fulfilment: 'تراجع عن «طلع للتوصيل»', undo_cod: 'تراجع عن «تم تحصيل المبلغ»' };
+const handedOver = (o: DemoOrder) => o.kind === 'done' || !!o.fulfilled;
 function actions(o: DemoOrder): OrderAction[] {
   if (o.cancelled) return [];
   const out: OrderAction[] = [];
@@ -181,33 +225,231 @@ function actions(o: DemoOrder): OrderAction[] {
   const paid = o.kind === 'cod' ? !!o.collected : true;
   // Open orders, and cash orders already handed over but not yet paid (as the dashboard's order card).
   const open = o.kind !== 'done' && !o.fulfilled;
+  if (handedOver(o)) out.push({ key: 'undo_fulfilment', label: o.kind === 'pickup' ? 'تراجع عن «جاهز للاستلام»' : labels.undo_fulfilment, confirm: 'ترجّع طلب #' + o.number + ' للتحضير؟ لو انرسل واتساب للعميل، ما ينسحب.', tone: 'undo' });
+  if (o.kind === 'cod' && o.collected) out.push({ key: 'undo_cod', label: labels.undo_cod, confirm: 'تسجّل إن كاش طلب #' + o.number + ' ما انحصل للحين؟', tone: 'undo' });
   if (open || (o.kind === 'cod' && !o.collected)) out.push({ key: 'cancel', label: labels.cancel, confirm: paid ? 'تلغي طلب #' + o.number + ' بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب.' : 'تلغي طلب #' + o.number + '؟ ما في مبلغ مدفوع.', tone: 'danger' });
   return out;
 }
 
+// ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
+const posSales: PosReceipt[] = [];
+const menuDrinks: [string, number][] = [['سبانش لاتيه', 2.2], ['آيس لاتيه', 2.1], ['أمريكانو', 1.5], ['كرك', 0.8]];
+const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
+function posCatalog(en: boolean): PosCatalog {
+  return {
+    products: [
+      ...menuDrinks.map(([name, price], i) => ({ id: 700 + i, name, group: 'drinks' as const, sku: 'MENU-' + i, price, stock: null, image: null })),
+      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+    ],
+    methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
+  };
+}
+function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
+  // Same reference and same basket: the same sale (as the store does).
+  const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => l.id + 'x' + l.qty).sort().join(',');
+  const done = posSales.find((s) => (s as PosReceipt & { ref?: string }).ref === ref);
+  if (done) return { ...done, repeat: true };
+  const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: (l.id >= 700 ? [menuDrinks[l.id - 700][0], menuDrinks[l.id - 700][1], null, null] : catalog[l.id - 100]) as (typeof catalog)[number], ...l }));
+  if (!lines.length) throw new Error(en ? 'The sale is empty.' : 'البيع فاضي.');
+  for (const l of lines) if (l.row && l.row[3] !== null && l.row[3] < l.qty) throw new Error(en ? l.row[0] + ': the store shows ' + l.row[3] + ' in stock. Fix the stock count first.' : l.row[0] + ': المخزون في النظام ' + l.row[3] + '. عدّل المخزون أول.');
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const sub = r3(lines.reduce((s, l) => s + l.row[1] * l.qty, 0));
+  const value = Number(p.discount) || 0;
+  const discount = r3(Math.min(sub, p.discount_type === 'percent' ? (sub * Math.min(100, value)) / 100 : value));
+  const total = r3(sub - discount);
+  const method = p.method as PosMethod;
+  const given = method === 'cash' && p.cash_given != null ? Number(p.cash_given) : null;
+  if (given !== null && given < total) throw new Error(en ? 'The cash given is less than the total.' : 'الكاش المستلم أقل من المجموع.');
+  for (const l of lines) if (l.row[3] !== null) l.row[3] -= l.qty;
+  const phone = String(p.phone ?? '').replace(/\D+/g, '');
+  const sale: PosReceipt & { ref: string } = {
+    ref, id: 900 + posSales.length, number: String(2400 + posSales.length), status: 'completed', date: new Date().toISOString(),
+    lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty) })), discount, total, method, method_label: methodLabel(method, en),
+    cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
+  };
+  posSales.unshift(sale);
+  return sale;
+}
+function posToday(): PosToday {
+  const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
+  const live = posSales.filter((s) => s.status === 'completed');
+  live.forEach((s) => (by[s.method] = Math.round((by[s.method] + s.total) * 1000) / 1000));
+  return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
+    sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
+}
+function posVoid(id: number, en: boolean): PosReceipt {
+  const s = posSales.find((x) => x.id === id);
+  if (!s || s.status !== 'completed') throw new Error(en ? 'Only a shop sale from today can be cancelled here.' : 'بس بيع المحل من اليوم ينلغى من هني.');
+  s.status = 'cancelled'; s.voidable = false;
+  for (const l of s.lines) { const row = catalog.find((c) => c[0] === l.name); if (row && row[3] !== null) row[3] += l.qty; }
+  return s;
+}
+
+// ---- Shop books: today's till sales and the expenses entered in the demo, kept in memory.
+const expenseLabel = (c: ShopExpenseCat, en: boolean) => ({ stock: en ? 'Supplies and stock' : 'مواد وبضاعة', rent: en ? 'Rent' : 'إيجار', salary: en ? 'Salaries' : 'رواتب', bills: en ? 'Bills' : 'فواتير', other: en ? 'Other' : 'ثاني' })[c];
+const shopExpenses: ShopExpense[] = [
+  { id: 'demo-exp-1', date: ymd(new Date()), amount: 6.5, cat: 'stock', cat_label: expenseLabel('stock', false), label: 'حليب وثلج', by: 'KOUB', at: new Date().toISOString(), removable: true },
+];
+function posBooks(period: string, en: boolean): ShopBooks {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const now = new Date();
+  const days = period === 'yesterday' ? 1 : period === '7days' ? 7 : period === 'month' ? Number(ymd(now).slice(8)) : 1;
+  const end = period === 'yesterday' ? ymd(new Date(now.getTime() - 86400_000)) : ymd(now);
+  const start = ymd(new Date(new Date(end + 'T12:00:00Z').getTime() - (days - 1) * 86400_000));
+  const live = period === 'yesterday' ? [] : posSales.filter((s) => s.status === 'completed');
+  const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
+  live.forEach((s) => (by[s.method] = r3(by[s.method] + s.total)));
+  const sales = r3(live.reduce((a, s) => a + s.total, 0));
+  const fees = r3((by.card + by.benefit) * 0.02);
+  const goods = r3(sales * 0.35);
+  const entries = shopExpenses.filter((e) => e.date >= start && e.date <= end).map((e) => ({ ...e, cat_label: expenseLabel(e.cat, en) }));
+  const expenses = r3(entries.reduce((a, e) => a + e.amount, 0));
+  const cats = new Map<ShopExpenseCat, number>();
+  entries.forEach((e) => cats.set(e.cat, r3((cats.get(e.cat) ?? 0) + e.amount)));
+  const count = live.length;
+  return {
+    period: { preset: period as ShopBooks['period']['preset'], start, end, label: start === end ? end : start + ' – ' + end },
+    sales, count, items: live.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0), average: count ? r3(sales / count) : 0, refunded: 0,
+    by_method: by, goods, fees, expenses,
+    by_category: [...cats].map(([key, value]) => ({ key, label: expenseLabel(key, en), value })).sort((a, b) => b.value - a.value),
+    profit: r3(sales - goods - fees - expenses), exact: false, missing: [en ? 'Karak (no cost yet)' : 'كرك (ما له تكلفة للحين)'],
+    days: [], entries, categories: (['stock', 'rent', 'salary', 'bills', 'other'] as ShopExpenseCat[]).map((key) => ({ key, label: expenseLabel(key, en) })),
+  };
+}
+function expenseAdd(p: Record<string, unknown>, en: boolean): { entry: ShopExpense; repeat?: boolean } {
+  const done = shopExpenses.find((e) => e.id === p.ref);
+  if (done) return { entry: done, repeat: true };
+  const amount = Math.round(Number(p.amount) * 1000) / 1000;
+  if (!(amount > 0)) throw new Error(en ? 'Enter the amount paid.' : 'اكتب المبلغ المدفوع.');
+  const cat = (p.cat as ShopExpenseCat) ?? 'other';
+  const entry: ShopExpense = { id: String(p.ref), date: String(p.date || ymd(new Date())), amount, cat, cat_label: expenseLabel(cat, en), label: String(p.label ?? ''), by: 'KOUB', at: new Date().toISOString(), removable: true };
+  shopExpenses.unshift(entry);
+  return { entry };
+}
+
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
+  if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
+  if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
+  if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/orders/quote' || path === '/orders/create') {
+    // Demo only: store prices, Bahrain delivery free from 14 like the store; nothing is sent to anyone.
+    const en = p.lang === 'en';
+    const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: catalog[l.id - 100], qty: l.qty })).filter((l) => l.row);
+    if (!lines.length) throw new Error(en ? 'The order is empty.' : 'الطلب فاضي.');
+    const sub = Math.round(lines.reduce((s, l) => s + l.row[1] * l.qty, 0) * 1000) / 1000;
+    const delivery = p.fulfilment === 'pickup' ? 0 : p.country === 'BH' ? (sub >= 14 ? 0 : 2) : 4.5;
+    if (path === '/orders/quote') return { subtotal: sub, delivery, total: sub + delivery } as T;
+    if (!String(p.name ?? '').trim()) throw new Error(en ? 'Enter the customer’s name.' : 'اكتب اسم الزبون.');
+    const pickup = p.fulfilment === 'pickup';
+    return { id: 990, number: '990', total: sub + delivery, method_label: String(p.method), name: String(p.name), whatsapp: String(p.phone).replace(/\D/g, ''), pickup,
+      address_state: pickup ? '' : 'awaiting_address', message_state: pickup ? '' : 'sent', link: pickup ? null : 'https://koubbh.com/address/#' + 'a'.repeat(64), lang: String(p.message_lang ?? 'ar') } as T;
+  }
+  if (/^\/orders\/\d+\/address-link$/.test(path)) return { id: 990, number: '990', total: 0, method_label: '', name: '', whatsapp: '', pickup: false, address_state: 'awaiting_address', message_state: 'sent', link: 'https://koubbh.com/address/#' + 'b'.repeat(64), lang: 'ar' } as T;
+  if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en') as T;
+  if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
+  if (/^\/orders\/\d+\/(payment-link|unpaid-dismiss)$/.test(path)) {
+    const [, , id, what] = path.split('/');
+    const i = unpaidRows.findIndex((r) => r.id === Number(id));
+    if (i < 0) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    if (what === 'unpaid-dismiss') { unpaidRows.splice(i, 1); return { ok: true } as T; }
+    const r = unpaidRows[i];
+    if (!r.payable) throw new Error(p.lang === 'en' ? 'This order can no longer be paid from a link.' : 'هالطلب ما عاد ينفع يندفع من رابط.');
+    r.shared = new Date().toISOString();
+    const url = 'https://koubbh.com/continue/demo' + r.id + '/';
+    return { url, text: 'هلا ' + r.name.split(' ')[0] + '، معك KOUB. دفع طلبك #' + r.number + ' ما اكتمل. تقدر تكمل الدفع من هالرابط:\n' + url, whatsapp: r.whatsapp } as T;
+  }
+  if (/^\/orders\/\d+\/contact$/.test(path)) {
+    const o = orders.find((x) => x.id === Number(path.split('/')[2]));
+    if (!o) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    editContact(o, p, p.lang === 'en');
+    return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+  }
   const [, , id, what] = path.split('/');
   const o = orders.find((x) => x.id === Number(id));
   if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
   o.notes ??= [];
   if (what === 'note') o.notes.push(String(p.note ?? '').trim().slice(0, 500));
-  else {
-    const key = p.action as ActionKey;
-    if (!actions(o).some((a) => a.key === key)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
-    if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
-    if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
-    if (key === 'cod_collected') o.collected = true;
-    if (key === 'cancel') { o.cancelled = true; o.next = null; }
-    o.notes.push('KOUB: ' + key + ' (demo)');
-  }
+  else if (!apply(o, p.action as ActionKey)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
   return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+}
+
+function apply(o: DemoOrder, key: ActionKey): boolean {
+  if (!actions(o).some((a) => a.key === key)) return false;
+  const done = ['طلع للتوصيل', 'جاهز للاستلام'];
+  if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
+  if (key === 'undo_fulfilment') { o.fulfilled = false; if (o.kind === 'done') o.kind = 'prepare_bh'; o.next = o.kind === 'pickup' ? 'ready_pickup' : 'out_delivery'; o.tags = o.tags.filter((t) => !done.includes(t.label)); }
+  if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
+  if (key === 'cod_collected') o.collected = true;
+  if (key === 'undo_cod') o.collected = false;
+  if (key === 'cancel') { o.cancelled = true; o.next = null; }
+  (o.notes ??= []).push('KOUB: ' + key + ' (demo)');
+  return true;
+}
+
+// The same rules as the store's bulk bar: cash only for orders already handed over; every skip has a reason.
+function bulk(ids: number[], key: BulkKey): BulkResult {
+  const out: BulkResult = { action: key, updated: 0, skipped: [] };
+  for (const id of [...new Set(ids)].slice(0, 20)) {
+    const o = orders.find((x) => x.id === id);
+    if (!o) continue;
+    const ok = apply(o, key);
+    if (ok) out.updated += 1;
+    else out.skipped.push({ id, number: o.number, reason: key === 'cod_collected' && !o.collected && !handedOver(o) ? 'ما تسلّم للحين. أكد الكاش من صفحة الطلب.' : key === 'out_delivery' && o.kind === 'pickup' ? 'طلب استلام، اضغط «جاهز للاستلام».' : 'هالخطوة مو متاحة لهالطلب.' });
+  }
+  return out;
+}
+// A plain demo slip; the real one comes from the store's dashboard template.
+function slipsHtml(ids: number[]): string {
+  const sheets = ids.map((id) => orders.find((o) => o.id === id)).filter(Boolean).map((o) => '<section class="sheet"><h1>KOUB</h1><h2>#' + o!.number + '</h2><p>' + o!.name + '</p><p>' + o!.items + '</p><p><b>' + o!.total.toFixed(3) + ' BHD</b></p><p class="demo">بيانات تجريبية · Demo data</p></section>').join('');
+  return '<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px Arial,sans-serif}.sheet{padding:24px;border-bottom:1px dashed #999;break-after:page}.demo{color:#a60}</style></head><body>' + sheets + '</body></html>';
+}
+function bulkChoices(view: string, prepare: string): BulkAction[] {
+  // Every step; the app shows the ones the ticked rows allow. Cancel only on All, like the dashboard.
+  const keys: BulkKey[] = ['out_delivery', 'ready_pickup', 'release_preorder', 'cod_collected'];
+  if (view === 'all') keys.push('cancel');
+  return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
+}
+
+// Pre-orders by item, the store's rules: an order waiting for one item only can be released from that item.
+const preKeys = (o: DemoOrder) => [...new Set(o.lines.filter(([i]) => i === 5 || i === 7).map(([i]) => 'p' + (100 + i)))];
+function preorderGroups(): PreorderGroup[] {
+  const open = orders.filter((o) => o.kind === 'preorder' && !o.released && !o.cancelled);
+  const keys = [...new Set(open.flatMap(preKeys))];
+  return keys.map((key) => {
+    const i = Number(key.slice(1)) - 100;
+    const mine = open.filter((o) => preKeys(o).includes(key));
+    const ready = mine.filter((o) => preKeys(o).length === 1).map((o) => o.id);
+    const qty = mine.reduce((sum, o) => sum + o.lines.filter(([x]) => x === i).reduce((a, [, q]) => a + q, 0), 0);
+    const oldest = mine.reduce((a, o) => (o.created && (!a || o.created < a) ? o.created : a), null as string | null);
+    return { key, name: catalog[i][0], orders: mine.length, qty, ready: ready.length, ready_ids: ready, mixed: mine.length - ready.length, oldest, ago: mine.find((o) => o.created === oldest)?.ago ?? '', stock: catalog[i][3], product_id: 100 + i, image: null, confirm: 'وصل مخزون ' + catalog[i][0] + '؟ ' + ready.length + ' طلب ينتقل للتحضير. ما ينرسل شي للعملاء.' };
+  }).sort((a, b) => b.orders - a.orders);
+}
+function releasePreorders(key: string, ids: number[]): ReleaseResult {
+  const ready = preorderGroups().find((g) => g.key === key)?.ready_ids ?? [];
+  const out: ReleaseResult = { updated: 0, skipped: [] };
+  for (const id of ids) {
+    const o = orders.find((x) => x.id === id);
+    if (o && ready.includes(id) && apply(o, 'release_preorder')) out.updated += 1;
+    else out.skipped.push({ id, number: String(id), reason: o && !o.released ? 'ينتظر منتج ثاني كمان. جهّزه من صفحة الطلب.' : 'ما عاد ينتظر.' });
+  }
+  return out;
+}
+function stockChange(id: number, delta: number, en: boolean): StockResult {
+  const row = catalog[id - 100];
+  if (!row || row[3] === null) throw new Error(en ? 'Use the product screen for this product.' : 'عدّل هالمنتج من صفحته.');
+  if (row[3] + delta < 0) throw new Error(en ? 'Only ' + row[3] + ' in stock.' : 'المخزون ' + row[3] + ' بس.');
+  row[3] += delta;
+  const stock = row[3];
+  return { qty: stock, revision: 'demo-' + id + '-' + stock, state: stock === 0 ? 'out' : stock <= 2 ? 'low' : 'ok' };
 }
 
 function products(filter: string, s: string): ProductList {
   const all: Product[] = catalog.map(([name, price, cost, stock], i) => {
     const state = i === 5 ? 'ok' : stock === 0 ? 'out' : stock !== null && stock <= 2 ? 'low' : 'ok';
-    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null };
+    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null, quick: stock !== null, revision: 'demo-' + (100 + i) + '-' + stock };
   });
   const keys = (p: Product) => ['all', p.state === 'draft' ? 'draft' : p.preorder ? 'preorder' : p.state === 'low' || p.state === 'out' ? p.state : ''];
   const c = { all: 0, low: 0, out: 0, preorder: 0, draft: 0 } as ProductList['counts'];
@@ -223,6 +465,12 @@ const EN: [string | RegExp, string][] = [
   [/^تأكد إن KOUB استلم كامل مبلغ الكاش من طلب #(\d+)؟$/, 'Confirm KOUB received the full cash amount for order #$1?'],
   [/^تلغي طلب #(\d+) بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب\.$/, 'Cancel order #$1 WITHOUT refunding the payment? Refunds are done from the order screen.'],
   [/^تلغي طلب #(\d+)؟ ما في مبلغ مدفوع\.$/, 'Cancel order #$1? No payment was taken.'],
+  [/^ترجّع طلب #(\d+) للتحضير؟ لو انرسل واتساب للعميل، ما ينسحب\.$/, 'Move order #$1 back to To prepare? A WhatsApp update already sent to the customer is not recalled.'],
+  [/^تسجّل إن كاش طلب #(\d+) ما انحصل للحين؟$/, 'Mark the cash for order #$1 as not received yet?'],
+  [/^تحدّث \{n\} طلبات محددة إلى «(.+)»؟ العملاء المؤهلين يوصلهم واتساب\.$/, 'Update {n} selected orders to “$1”? Eligible customers get a WhatsApp update.'],
+  ['تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟', 'Confirm KOUB received the full cash amount for {n} selected orders?'], ['تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟', 'Cancel {n} selected orders WITHOUT refunding the payment?'],
+  ['ما تسلّم للحين. أكد الكاش من صفحة الطلب.', 'not handed over yet. Confirm its cash from the order screen.'], ['هالخطوة مو متاحة لهالطلب.', 'this step isn’t available for this order.'],
+  ['طلب استلام، اضغط «جاهز للاستلام».', 'pickup order. Use “Ready for pickup”.'], ['تراجع عن «', 'Undo “'], ['إلغاء الطلبات', 'Cancel orders'],
   ['كاش عند التوصيل · ما انحصل للحين', 'Cash on delivery · not collected yet'], ['هدية · تنتظر العنوان', 'Gift · address needed'], ['السعودية · شحن', 'Saudi Arabia · Shipping'],
   ['دعوة المستلم يضيف عنوانه', 'Gift address invitation'], ['ينتظر عنوان مستلم الهدية.', 'Waiting for the gift recipient’s address.'], ['ينتظر منتج الطلب المسبق.', 'Waiting for the pre-order product.'],
   ['خلص. طلع للتوصيل.', 'Done. Out for delivery.'], ['لو سمحت التوصيل بعد الساعة 6', 'Please deliver after 6'], ['كل عام وأنتِ بخير', 'Happy birthday'],
@@ -238,7 +486,7 @@ const EN: [string | RegExp, string][] = [
   ['سارة م.', 'Sara M.'], ['خالد ع.', 'Khalid A.'], ['نورة ي.', 'Noora Y.'], ['أحمد س.', 'Ahmed S.'], ['ريم ح.', 'Reem H.'], ['يوسف ب.', 'Yusuf B.'], ['دانة ف.', 'Dana F.'],
   ['عبدالله ر.', 'Abdulla R.'], ['مريم ك.', 'Maryam K.'], ['حمد ج.', 'Hamad J.'], ['فاطمة ن.', 'Fatima N.'], ['علي ط.', 'Ali T.'], ['لولوة', 'Lulwa'], ['مساحة KOUB', 'KOUB workspace'],
   ['يناير', 'January'], ['فبراير', 'February'], ['مارس', 'March'], ['أبريل', 'April'], ['مايو', 'May'], ['يونيو', 'June'], ['يوليو', 'July'], ['أغسطس', 'August'], ['سبتمبر', 'September'], ['أكتوبر', 'October'], ['نوفمبر', 'November'], ['ديسمبر', 'December'],
-  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '],
+  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '], ['»', '”'], ['«', '“'],
 ];
 function english<T>(v: T): T {
   if (typeof v === 'string') {
@@ -274,11 +522,18 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
+  if (path === '/preorders') return { groups: preorderGroups() } as T;
+  if (path === '/run') return run() as T;
+  if (path === '/unpaid') return unpaidList() as T;
+  if (path === '/pos/catalog') return posCatalog(false) as T;
+  if (path === '/pos/today') return posToday() as T;
+  if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {
     const view = String(p.view ?? 'active'), prepare = String(p.prepare ?? 'all'), q = String(p.s ?? '');
     const rows = orders.filter((o) => inView(o, view, prepare) && (!q || o.number.includes(q) || o.name.includes(q)));
-    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip) } as T;
+    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip), bulk: bulkChoices(view, prepare), print: view === 'all' || (view === 'active' && prepare !== 'pickup') } as T;
   }
   throw new Error('Unknown demo route ' + path);
 }

@@ -26,9 +26,20 @@ export default function Home() {
         <Txt size={30} style={{ fontFamily: font.brand, letterSpacing: 3, lineHeight: 36 }} ltr>KOUB</Txt>
         <Muted>{today(new Date(), lang)}</Muted>
       </View>
-      <Touch onPress={() => router.push('/more')} style={st.avatar} accessibilityLabel={t('account')}>
-        <Txt size={16} weight="semibold" tint={color.bg} center>{me?.initial ?? 'K'}</Txt>
-      </Touch>
+      <Row gap={8}>
+        {/* The shop till, one tap from home. */}
+        <Touch onPress={() => router.push('/pos')} style={st.till} accessibilityLabel={t('pos')}>
+          <Icon name="cash" size={18} tint={color.bg} />
+          <Txt size={14} weight="semibold" tint={color.bg}>{t('pos')}</Txt>
+        </Touch>
+        {/* An order for a customer who can't order on the website. */}
+        <Touch onPress={() => router.push('/order-new')} style={st.newOrder} accessibilityLabel={t('newOrder')}>
+          <Icon name="plus" size={20} />
+        </Touch>
+        <Touch onPress={() => router.push('/more')} style={st.avatar} accessibilityLabel={t('account')}>
+          <Txt size={16} weight="semibold" tint={color.bg} center>{me?.initial ?? 'K'}</Txt>
+        </Touch>
+      </Row>
     </Row>
   );
 
@@ -50,7 +61,7 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
     [['bahrain', t('bahrain')], ['international', t('gcc')], ['pickup', t('pickup')], ['unknown', t('noAddress')]] as const
   ).filter(([k]) => n.prepare.by[k]).map(([k, l]) => n.prepare.by[k] + ' ' + l).join(' · ');
   const notes: { tone: keyof typeof tone; text: string; go: () => void }[] = [];
-  if (n.preorder) notes.push({ tone: 'amber', text: t('preorderWaiting', { n: ordersCount(n.preorder, lang) }), go: () => router.push({ pathname: '/orders', params: { view: 'preorder' } }) });
+  if (n.preorder) notes.push({ tone: 'amber', text: t('preorderWaiting', { n: ordersCount(n.preorder, lang) }), go: () => (d.work ? router.push('/preorders') : router.push({ pathname: '/orders', params: { view: 'preorder' } })) });
   if (d.stock.out || d.stock.low) notes.push({ tone: 'amber', text: [d.stock.out ? t('stockOut', { n: d.stock.out }) : '', d.stock.low ? t('stockLow', { n: d.stock.low }) : ''].filter(Boolean).join(' · '), go: () => router.push({ pathname: '/products', params: { filter: d.stock.out ? 'out' : 'low' } }) });
   if (!d.profit.exact) notes.push({ tone: 'muted', text: t('missingCosts'), go: () => router.push('/numbers') });
 
@@ -58,7 +69,7 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
     <FadeIn>
       {/* Headline profit */}
       <View style={{ marginTop: space.xl }}>
-        <Muted size={14}>{label + (d.profit.exact ? '' : ' · ' + t('estimate'))}</Muted>
+        <Muted size={14}>{(d.shop ? t('online') + ' · ' : '') + label + (d.profit.exact ? '' : ' · ' + t('estimate'))}</Muted>
         <Row gap={8} align="flex-end" style={{ marginTop: 2 }}>
           <Txt size={52} weight="bold" style={{ lineHeight: 60, letterSpacing: -1.5 }} ltr>{num(d.profit.value)}</Txt>
           <Txt size={18} weight="medium" tint={color.muted} style={{ marginBottom: 10 }}>{currency(lang)}</Txt>
@@ -70,11 +81,27 @@ function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
         <View style={{ marginTop: space.lg }}><SalesLine points={d.spark} rtl={lang === 'ar'} /></View>
       </View>
 
+      {/* The shop till's own books: shown beside the online figures, never added to them. */}
+      {d.shop && (
+        <Touch onPress={() => router.push('/pos-books')} style={st.shop}>
+          <Icon name="store" size={20} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt size={15} weight="semibold">{t('books') + (d.shop.exact ? '' : ' · ' + t('estimate'))}</Txt>
+            <Muted size={13}>{t('shopLine', { x: money(d.shop.sales, lang), n: t('booksSalesN', { n: d.shop.count }), e: money(d.shop.expenses, lang) })}</Muted>
+          </View>
+          <Txt size={16} weight="bold" tint={d.shop.profit < 0 ? color.red : color.ink} ltr>{num(d.shop.profit)}</Txt>
+          <Icon name="chevron" size={16} tint={color.faint} rtl={lang === 'ar'} />
+        </Touch>
+      )}
+
       {/* Needs you */}
       <SectionTitle title={t('needsYou')} />
       <View style={st.tiles}>
         <Tile icon="truck" tint="amber" title={t('toPrepare')} value={String(n.prepare.count)} sub={prepBy || t('nothingWaiting')} onPress={() => router.push({ pathname: '/orders', params: { view: 'active' } })} />
         <Tile icon="cash" tint="amber" title={t('cashWithCourier')} value={num(n.cod.amount)} sub={n.cod.count ? t('notCollected', { n: ordersCount(n.cod.count, lang) }) : t('allCollected')} onPress={() => router.push({ pathname: '/orders', params: { view: 'cod' } })} />
+        {d.work && <Tile icon="truck" tint="blue" title={t('outToday')} value={String(d.work.run.count)} sub={d.work.run.cod ? t('collectX', { x: money(d.work.run.cod, lang) }) : d.work.run.total ? t('openRun') : t('noneWaiting')} onPress={() => router.push('/run')} />}
+        {d.work && n.preorder > 0 && <Tile icon="products" tint="amber" title={t('preorderReady')} value={String(d.work.preorder_ready)} sub={t('preorderWaiting', { n: ordersCount(n.preorder, lang) })} onPress={() => router.push('/preorders')} />}
+        {d.work?.unpaid && <Tile icon="cash" tint="red" title={t('unpaidTitle')} value={String(d.work.unpaid.count)} sub={d.work.unpaid.count ? money(d.work.unpaid.value, lang) : t('noneWaiting')} onPress={() => router.push('/unpaid')} />}
         <Tile icon="gift" tint="blue" title={t('giftNeedsAddress')} value={String(n.gifts.count)} sub={n.gifts.count ? '' : t('noneWaiting')} onPress={() => router.push({ pathname: '/orders', params: { view: 'gifts' } })} />
         <Tile icon="whatsapp" tint="red" title={t('waNotDelivered')} value={String(n.whatsapp.count)} sub={n.whatsapp.order_id ? t('orderNo', { n: n.whatsapp.order_id }) : t('allDelivered')} onPress={() => (n.whatsapp.order_id ? router.push({ pathname: '/order/[id]', params: { id: String(n.whatsapp.order_id) } }) : router.push('/orders'))} />
       </View>
@@ -170,7 +197,10 @@ function HomeSkeleton() {
 }
 
 const st = StyleSheet.create({
+  shop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: space.lg, padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
+  till: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: color.ink },
+  newOrder: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center' },
   delta: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, justifyContent: 'space-between' },
   tile: { width: '48.2%', minHeight: 128, backgroundColor: color.surface, borderRadius: radius.lg, padding: space.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, gap: 2 },
