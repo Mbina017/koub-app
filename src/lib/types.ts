@@ -117,6 +117,9 @@ export type Order = {
   address: { text: string; country: string };
   // API 1.3: delivery details this order can change from the app, with their saved values; null when it is closed.
   contact_edit?: ContactEdit | null;
+  // API 1.9: what the order holds while it can still be changed, and any amount owed back after a change.
+  items_edit?: ItemsEdit | null;
+  refund_owed?: number | null;
   gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean } | null;
   // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
   address_link?: { message: string; lang: string } | null;
@@ -294,3 +297,9 @@ export type ShopBooks = {
   categories: { key: ShopExpenseCat; label: string }[];
 };
 export type ShopExpenseInput = { ref: string; amount: number; cat: ShopExpenseCat; label: string; date: string };
+// API 1.9: changing the items. Lines in the order keep the price paid (`unit`); a set lists its mugs per set.
+export type ItemPart = { name: string; qty: number };
+export type ItemsEditLine = { item_id: number; product_id: number; name: string; qty: number; unit: number; set_size: number; parts: ItemPart[] };
+export type ItemsEdit = { lines: ItemsEditLine[]; mugs: string[]; sets: Record<string, number>; cod: boolean; total: number };
+export type ItemsMethod = StaffMethod | 'free';
+export type ItemsInput = { lines: { item_id?: number; id?: number; qty: number; parts?: ItemPart[] }[]; expected_total: number | null; method: ItemsMethod | '' };

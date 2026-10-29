@@ -17,6 +17,7 @@ import { confirmStep, showMessage } from '../../lib/confirm';
 import { shareSlips } from '../../lib/print';
 import { Button, Card, ErrorState, FadeIn, Muted, Row, Skeleton, TagChip, Touch, Txt, tap } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
+import { ItemsEditor } from '../../components/ItemsEditor';
 
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -341,8 +342,17 @@ function Action({ icon, label, onPress, disabled }: { icon: IconName; label: str
 }
 
 function Items({ o }: { o: Order }) {
+  const session = useApiSession();
   const { t, lang } = useSession();
+  const [editing, setEditing] = useState(false);
+  const update = useOrderUpdate(o.id);
+  const refunded = useMutation({
+    mutationFn: () => api.refundOwedDone(session, o.id),
+    onSuccess: (data) => { update(data); tap('select'); },
+    onError: (e) => showMessage(t('notUpdated'), e.message),
+  });
   const tot = o.totals;
+  if (editing && o.items_edit) return <Card><ItemsEditor o={o} edit={o.items_edit} onSaved={update} onClose={() => setEditing(false)} /></Card>;
   return (
     <Card>
       <Txt size={16} weight="semibold" style={{ marginBottom: space.sm }}>{t('items')}</Txt>
@@ -369,6 +379,18 @@ function Items({ o }: { o: Order }) {
         <Icon name={o.payment.tone === 'green' ? 'check' : o.payment.tone === 'amber' ? 'cash' : 'warn'} size={18} stroke={2} tint={tone[o.payment.tone].fg} />
         <Txt size={14} weight="medium" tint={tone[o.payment.tone].fg} style={{ flex: 1 }}>{o.payment.label}</Txt>
       </View>
+      {!!o.refund_owed && (
+        <View style={[st.inset, { backgroundColor: color.blueBg, gap: 8 }]}>
+          <Txt size={14} weight="semibold" tint={color.blue}>{t('refundOwed', { x: money(o.refund_owed, lang) })}</Txt>
+          <Button label={t('refundDone')} icon="check" kind="light" loading={refunded.isPending}
+            onPress={() => confirmStep({ label: t('refundDone'), confirm: t('refundDoneQ', { x: money(o.refund_owed!, lang) }), tone: 'primary' }, t('notNow'), () => refunded.mutate())} />
+        </View>
+      )}
+      {o.items_edit && (
+        <Touch onPress={() => setEditing(true)} style={[st.action, { flex: 0, flexDirection: 'row', justifyContent: 'center', marginTop: space.md }]}>
+          <Icon name="edit" size={18} /><Txt size={14} weight="medium">{t('editItems')}</Txt>
+        </Touch>
+      )}
     </Card>
   );
 }
