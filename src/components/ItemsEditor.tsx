@@ -49,9 +49,10 @@ export function ItemsEditor({ o, edit, onSaved, onClose }: { o: Order; edit: Ite
   const add = (p: PosProduct) => {
     const size = edit.sets[String(p.id)] ?? 0;
     const key = 'n' + p.id + '-' + ++seq.current;
-    // Another of something already listed (not a set, which has its own mugs) adds to that line; read from the latest state.
+    // Another of something added here (not a set, which has its own mugs) adds to that line, read from the latest state.
+    // A product already in the order gets its own line, so the extra is at today's price, not the price paid then.
     setLines((ls) => {
-      const same = size ? undefined : ls.find((l) => l.product_id === p.id && l.size === 0);
+      const same = size ? undefined : ls.find((l) => !l.item_id && l.product_id === p.id);
       if (same) return ls.map((l) => (l.key === same.key ? { ...l, qty: Math.min(99, l.qty + 1) } : l));
       return [...ls, { key, product_id: p.id, name: p.name, qty: 1, unit: p.price, size, parts: {}, own: [], changed: true }];
     });

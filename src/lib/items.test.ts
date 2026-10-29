@@ -28,3 +28,7 @@ test('cash on delivery: the courier collects the new total', () => {
   const r = itemsMoney(o(10.5, 0, 0, true), [{ total: 8.5 }], [{ qty: 1, total: 8.5, was: 1, unit: 8.5 }, { qty: 1, unit: 7 }], false);
   assert.equal(r.total, 17.5); assert.equal(r.needsMethod, false);
 });
+test('half fils round like the store (PHP round)', () => {
+  assert.equal(lineValue({ qty: 1, total: 1.001, was: 2, unit: 0.5 }), 0.501);
+  assert.equal(lineValue({ qty: 3, total: 0.009, was: 2, unit: 0.005 }), 0.014);
+});

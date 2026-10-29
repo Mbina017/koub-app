@@ -3,7 +3,8 @@
 // Less to pay first takes back any difference given free before, then the rest is owed back to the customer.
 // More to pay first uses up anything owed back, then the rest is paid (by a method staff choose) or given free.
 // Cash on delivery not collected yet: the courier just collects the new total.
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
+// Rounds to the fil like PHP's round(): exact halves go up even when the float is stored a hair below (1.001 / 2 → 0.501).
+const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
 
 export type MoneyLine = { qty: number; total?: number; was?: number; unit: number };
 // A line's value now: its own total if it was in the order, scaled to the fil like the store, else unit × qty.
