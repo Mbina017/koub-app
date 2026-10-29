@@ -11,7 +11,7 @@ import { api, ApiError, dashboardOrderUrl } from '../../lib/api';
 import { useApiSession, useSession } from '../../lib/session';
 import { color, font, radius, space, tone } from '../../lib/theme';
 import { money, num } from '../../lib/format';
-import type { ContactEdit, ContactInput, CostKey, Order, OrderAction } from '../../lib/types';
+import type { ContactEdit, ContactInput, CostKey, GiftInstagram, GiftInstagramLink, Order, OrderAction } from '../../lib/types';
 import { orderProgress } from '../../lib/progress';
 import { confirmStep, showMessage } from '../../lib/confirm';
 import { shareSlips } from '../../lib/print';
@@ -289,6 +289,8 @@ function Customer({ o }: { o: Order }) {
           {!!o.gift.message && <Txt size={14} style={{ marginTop: 6, fontStyle: 'italic' }}>{'“' + o.gift.message + '”'}</Txt>}
         </View>
       )}
+      {o.gift?.instagram?.waiting && <InstagramGift o={o} ig={o.gift.instagram} />}
+      {o.gift?.buyer_sends && o.gift.waiting_address && <View style={[st.inset, { backgroundColor: color.sunken }]}><Muted size={13}>{t('buyerSendsLink')}</Muted></View>}
       {!!o.note && (
         <View style={[st.inset, { backgroundColor: color.sunken }]}>
           <Muted size={12}>{t('customerNote')}</Muted>
@@ -328,6 +330,47 @@ function AddressLink({ o }: { o: Order }) {
         <Action icon="whatsapp" label={t('sendLinkWa')} disabled={!o.customer.whatsapp || link.isPending} onPress={() => link.mutate(false)} />
         <Action icon="bell" label={link.isPending ? '…' : t('resendLink')} disabled={link.isPending} onPress={() => link.mutate(true)} />
       </Row>
+    </View>
+  );
+}
+
+// A gift recipient KOUB reaches on Instagram (API 1.10): Meta lets no shop start that conversation automatically, so staff
+// copy the message (with a fresh private address link, so the buyer stays hidden), send it from KOUB's account, then mark it sent.
+function InstagramGift({ o, ig }: { o: Order; ig: GiftInstagram }) {
+  const session = useApiSession();
+  const { t } = useSession();
+  const update = useOrderUpdate(o.id);
+  const [copied, setCopied] = useState(false);
+  const text = (r: GiftInstagramLink) => [
+    'هلا ' + r.name + ' 🤎', 'معك KOUB. في أحد اختار لك هدية من عندنا 🎁' + (r.sender ? ' من: ' + r.sender : ''),
+    'أضف عنوان التوصيل ورقم واتسابك من هالرابط الخاص، عشان نوصلها لك:', '',
+    'Hi ' + r.name + ', someone chose a KOUB gift for you' + (r.sender ? ' (from ' + r.sender + ')' : '') + '. Add your delivery details here:', r.link,
+  ].join('\n');
+  const link = useMutation({
+    mutationFn: () => api.giftInstagramLink(session, o.id),
+    onSuccess: async (r) => { await Clipboard.setStringAsync(text(r)); tap('select'); setCopied(true); showMessage(t('igCopy'), t('igCopied')); },
+    onError: (e) => showMessage(t('notUpdated'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+  });
+  const sent = useMutation({
+    mutationFn: () => api.giftInstagramSent(session, o.id),
+    onSuccess: (data) => { update(data); tap('select'); },
+    onError: (e) => showMessage(t('notUpdated'), e.message),
+  });
+  const handle = '@' + ig.handle;
+  return (
+    <View style={[st.inset, { backgroundColor: ig.sent ? color.greenBg : color.amberBg, gap: 8 }]}>
+      <Txt size={14} weight="semibold" tint={ig.sent ? color.green : color.amber}>{ig.sent ? t('igSent') : t('igToSend', { h: handle })}</Txt>
+      {!ig.sent && <Muted size={12}>{t('igSteps')}</Muted>}
+      <Row gap={8}>
+        {/* Each copy makes a new link and the old one stops working: after "Sent", ask first so the recipient's link is not broken by mistake. */}
+        <Action icon={copied ? 'check' : 'copy'} label={link.isPending ? '…' : ig.sent ? t('igNewLink') : t('igCopy')} disabled={link.isPending}
+          onPress={() => (ig.sent ? confirmStep({ label: t('igNewLink'), confirm: t('igNewLinkQ'), tone: 'danger' }, t('notNow'), () => link.mutate()) : link.mutate())} />
+        <Action icon="external" label={t('igOpen')} onPress={() => Linking.openURL(ig.url).catch(() => {})} />
+      </Row>
+      {!ig.sent && (
+        <Button label={t('igMarkSent')} icon="check" kind="light" loading={sent.isPending}
+          onPress={() => confirmStep({ label: t('igMarkSent'), confirm: t('igMarkSentQ', { h: handle }), tone: 'primary' }, t('notNow'), () => sent.mutate())} />
+      )}
     </View>
   );
 }

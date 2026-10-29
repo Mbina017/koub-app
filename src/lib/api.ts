@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -113,6 +113,9 @@ export const api = {
   // API 1.9: change the items (the store checks stock and the total), and clear an amount owed back once refunded.
   orderItems: (s: Session, id: number, input: ItemsInput) => post<Order>(s, '/orders/' + id + '/items', { ...input, lang: appLang }),
   refundOwedDone: (s: Session, id: number) => post<Order>(s, '/orders/' + id + '/refund-owed', { lang: appLang }),
+  // API 1.10: a fresh private address link for the Instagram message (any older link stops working), and "sent".
+  giftInstagramLink: (s: Session, id: number) => post<GiftInstagramLink>(s, '/orders/' + id + '/gift-instagram-link', { lang: appLang }),
+  giftInstagramSent: (s: Session, id: number) => post<Order>(s, '/orders/' + id + '/gift-instagram-sent', { lang: appLang }),
   // API 1.3: unfinished payments. Nothing is sent by the store; the app opens WhatsApp with the link filled in.
   unpaid: (s: Session) => get<UnpaidList>(s, '/unpaid'),
   paymentLink: (s: Session, id: number) => post<PaymentLink>(s, '/orders/' + id + '/payment-link', { lang: appLang }),
