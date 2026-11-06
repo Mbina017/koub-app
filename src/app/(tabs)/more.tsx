@@ -1,0 +1,110 @@
+import { useEffect, useState } from 'react';
+import { Platform, StyleSheet, Switch, View } from 'react-native';
+import Constants from 'expo-constants';
+import { router } from 'expo-router';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSession } from '../../lib/session';
+import { color, radius, space } from '../../lib/theme';
+import { Card, Muted, Row, Screen, SectionTitle, Segmented, Touch, Txt } from '../../components/ui';
+import type { LangPref } from '../../lib/session';
+import { Icon, type IconName } from '../../components/Icon';
+
+export default function More() {
+  const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush } = useSession();
+  const [pushNote, setPushNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const changePush = async (p: typeof push) => {
+    setBusy(true); setPushNote('');
+    const r = await savePush(p);
+    setBusy(false);
+    if (r !== 'on' && r !== 'off') setPushNote(t(('push_' + r) as 'push_denied'));
+  };
+  const client = useQueryClient();
+  const [canLock, setCanLock] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    LocalAuthentication.hasHardwareAsync().then(async (hw) => setCanLock(hw && (await LocalAuthentication.isEnrolledAsync()))).catch(() => {});
+  }, []);
+  const site = session && !('demo' in session) ? session.site.replace(/^https:\/\//, '') : t('demoBanner');
+
+  return (
+    <Screen title={t('more')}>
+      <Card style={{ marginTop: space.sm }}>
+        <Row gap={12}>
+          <View style={st.avatar}><Txt size={20} weight="semibold" tint={color.bg} center>{me?.initial ?? 'K'}</Txt></View>
+          <View style={{ flex: 1 }}>
+            <Txt size={17} weight="semibold">{me?.name ?? ''}</Txt>
+            <Muted ltr style={{ textAlign: 'auto' }}>{site}</Muted>
+          </View>
+        </Row>
+      </Card>
+
+      <SectionTitle title={t('language')} icon="globe" />
+      <Segmented<LangPref>
+        items={[['ar', t('langAr')], ['en', t('langEn')], ['auto', t('langAuto')]]}
+        value={langPref}
+        // Refetch so tags and statuses from the store come back in the new language too.
+        onChange={async (p) => { await setLangPref(p); client.invalidateQueries(); }}
+      />
+      <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
+
+      <SectionTitle title={t('alerts')} icon="bell" />
+      <Card padded={false}>
+        <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last={!push.on} />
+        {push.on && <Item icon="cash" label={t('unpaidAlerts')} sub={t('unpaidAlertsHint')} right={<Switch value={push.unpaid} disabled={busy} onValueChange={(unpaid) => changePush({ ...push, unpaid })} trackColor={{ true: color.ink, false: color.line }} />} />}
+        {push.on && <Item icon="products" label={t('stockAlerts')} sub={t('stockAlertsHint')} right={<Switch value={push.stock} disabled={busy} onValueChange={(stock) => changePush({ ...push, stock })} trackColor={{ true: color.ink, false: color.line }} />} />}
+        {push.on && <Item icon="lock" label={t('quietNight')} sub={t('quietNightHint')} right={<Switch value={push.quiet} disabled={busy} onValueChange={(quiet) => changePush({ ...push, quiet })} trackColor={{ true: color.ink, false: color.line }} />} last />}
+      </Card>
+      {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+
+      <SectionTitle title={t('pos')} icon="cash" />
+      <Card padded={false}>
+        <Item icon="cash" label={t('posOpen')} sub={t('posOpenHint')} onPress={() => router.push('/pos')} />
+        <Item icon="users" label={t('newOrder')} sub={t('newOrderHint')} onPress={() => router.push('/order-new')} />
+        <Item icon="numbers" label={t('posToday')} onPress={() => router.push('/pos-today')} />
+        <Item icon="gift" label={t('loyOpen')} sub={t('loyOpenHint')} onPress={() => router.push('/loyalty')} last />
+      </Card>
+
+      <SectionTitle title={t('account')} />
+      <Card padded={false}>
+        {canLock && (
+          <Item icon="lock" label={t('faceLock')} sub={t('faceLockHint')} right={<Switch value={lock} onValueChange={setLock} trackColor={{ true: color.ink, false: color.line }} />} />
+        )}
+        <Item icon="logout" label={t('signOut')} danger last onPress={async () => { client.clear(); await signOut(); }} />
+      </Card>
+
+      <SectionTitle title={t('comingNext')} />
+      <Card padded={false}>
+        <Item icon="truck" label={t('soonActions')} soon />
+        <Item icon="edit" label={t('soonEdit')} soon last />
+      </Card>
+
+      <Muted size={12} center style={{ marginTop: space.xl }}>{'KOUB · ' + t('version', { v: Constants.expoConfig?.version ?? '1.0.0' })}</Muted>
+    </Screen>
+  );
+}
+
+function Item({ icon, label, sub, right, onPress, danger, soon, last }: { icon: IconName; label: string; sub?: string; right?: React.ReactNode; onPress?: () => void; danger?: boolean; soon?: boolean; last?: boolean }) {
+  const { t } = useSession();
+  const body = (
+    <Row gap={12} style={[st.item, !last && st.sep]}>
+      <View style={[st.icon, danger && { backgroundColor: color.redBg }]}><Icon name={icon} size={19} tint={danger ? color.red : color.ink} /></View>
+      <View style={{ flex: 1 }}>
+        <Txt size={15} weight="medium" tint={danger ? color.red : color.ink}>{label}</Txt>
+        {sub && <Muted size={12}>{sub}</Muted>}
+      </View>
+      {soon && <View style={st.soon}><Txt size={11} weight="semibold" tint={color.muted}>{t('comingNext')}</Txt></View>}
+      {right}
+    </Row>
+  );
+  return onPress ? <Touch onPress={onPress}>{body}</Touch> : body;
+}
+
+const st = StyleSheet.create({
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
+  item: { paddingHorizontal: space.lg, paddingVertical: space.md },
+  sep: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  icon: { width: 36, height: 36, borderRadius: 10, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center' },
+  soon: { backgroundColor: color.sunken, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+});
