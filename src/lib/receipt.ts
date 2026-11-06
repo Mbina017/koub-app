@@ -32,6 +32,7 @@ export function receiptHtml(r: PosReceipt, lang: Lang) {
   ${row(esc(r.method_label), money(r.cash_given ?? r.total, lang))}
   ${r.change !== null && r.change > 0 ? row(L('Change', 'الباقي'), money(r.change, lang)) : ''}
   </table>
+  ${r.loyalty && !r.loyalty.failed ? `<div class="sep"></div><div class="meta">${L('KOUB card', 'بطاقة KOUB')}: ${r.loyalty.stamps}/${r.loyalty.of}${r.loyalty.redeemed ? ' · ' + L('free drink used', 'مشروب مجاني') : ''}${r.loyalty.rewards > 0 ? ' · ' + L('free drink waiting', 'مشروب مجاني ينتظرك') : ''}</div>` : ''}
   ${r.status === 'cancelled' ? `<div class="sep"></div><div class="thanks"><b>${L('CANCELLED', 'ملغي')}</b></div>` : ''}
   <div class="thanks">${L('Thank you for shopping at KOUB', 'شكراً لتسوقك من KOUB')}<br>koubbh.com</div>
   </body></html>`;
@@ -45,5 +46,6 @@ export function receiptText(r: PosReceipt, lang: Lang) {
     items,
     r.discount > 0 ? (ar ? 'خصم: ' : 'Discount: ') + money(r.discount, lang) : '',
     (ar ? 'المجموع: ' : 'Total: ') + money(r.total, lang) + ' · ' + r.method_label,
+    r.loyalty && !r.loyalty.failed ? (ar ? `بطاقة KOUB: ${r.loyalty.stamps}/${r.loyalty.of} أختام` : `KOUB card: ${r.loyalty.stamps}/${r.loyalty.of} stamps`) + (r.loyalty.rewards > 0 ? (ar ? ' · مشروبك المجاني ينتظرك ☕' : ' · your free drink is waiting ☕') : '') : '',
   ].filter(Boolean).join('\n');
 }

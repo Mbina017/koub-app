@@ -237,7 +237,8 @@ export type StaffOrder = {
 export type StaffQuote = { subtotal: number; delivery: number | null; total: number | null };
 // group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
 export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; sku: string; price: number; stock: number | null; image: string | null };
-export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[] };
+// loyalty: the store's card rule (API 1.11); null or missing on older stores.
+export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null };
 export type PosSaleInput = {
   ref: string;
   lines: { id: number; qty: number }[];
@@ -249,6 +250,9 @@ export type PosSaleInput = {
   expected_total: number;
   name: string;
   phone: string;
+  // KOUB loyalty card scanned at the till (API 1.11): its code, and whether to use a free drink waiting on it.
+  loyalty?: string;
+  loyalty_redeem?: boolean;
 };
 export type PosReceipt = {
   id: number;
@@ -266,6 +270,8 @@ export type PosReceipt = {
   whatsapp: string | null;
   voidable: boolean;
   repeat?: boolean;
+  // The card after this sale (API 1.11).
+  loyalty?: PosLoyalty | null;
 };
 export type PosToday = {
   count: number;
@@ -309,3 +315,21 @@ export type ItemsInput = { lines: { item_id?: number; id?: number; qty: number; 
 // API 1.10: a gift recipient KOUB messages on Instagram. `waiting`: still needs the message (paid, no address yet).
 export type GiftInstagram = { handle: string; url: string; sent: string | null; waiting: boolean };
 export type GiftInstagramLink = { link: string; handle: string; name: string; sender: string; message: string };
+
+// ---- Loyalty cards (API 1.11): buy 4 drinks at the till, the 5th free.
+export type LoyaltyProgress = { stamps: number; of: number; need: number; rewards: number };
+export type LoyaltyCard = LoyaltyProgress & {
+  id: number; code: string; name: string; whatsapp: string; lang: Lang;
+  visits: number; earned: number; redeemed: number; last_visit: string | null; ago: string | null; created: string | null; contacted: string | null;
+  // The customer's private card page, to resend from staff WhatsApp.
+  card_url: string;
+  history?: { date: string | null; order_id: number; add: number; redeem: boolean; returned: boolean }[];
+  // In the away list: days since the last visit.
+  days?: number;
+};
+export type PosLoyalty = LoyaltyProgress & { code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean };
+export type LoyaltySummary = {
+  rule: { stamps: number; max_per_sale: number }; join_url: string; wallet: { apple: boolean; google: boolean };
+  members: number; active_30: number; joined_30: number; stamps_30: number; free_30: number; rewards_waiting: number;
+  away: LoyaltyCard[];
+};

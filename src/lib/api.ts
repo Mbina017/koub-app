@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink, LoyaltySummary, LoyaltyCard } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -125,6 +125,11 @@ export const api = {
   posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
   posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
   posVoid: (s: Session, id: number) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { lang: appLang }),
+  // Loyalty cards (API 1.11).
+  loyalty: (s: Session) => get<LoyaltySummary>(s, '/loyalty'),
+  loyaltyCard: (s: Session, code: string) => get<LoyaltyCard>(s, '/loyalty/card', { code }),
+  loyaltyFind: (s: Session, phone: string) => get<LoyaltyCard>(s, '/loyalty/find', { phone }),
+  loyaltyContacted: (s: Session, id: number) => post<LoyaltyCard>(s, '/loyalty/' + id + '/contacted', { lang: appLang }),
   // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),
   posExpenseAdd: (s: Session, e: ShopExpenseInput) => post<{ entry: ShopExpense; repeat?: boolean }>(s, '/pos/expenses', { ...e, lang: appLang }),
