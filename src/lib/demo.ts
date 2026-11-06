@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, ShopBooks, ShopExpense, ShopExpenseCat, LoyaltyCard, LoyaltySummary, PosLoyalty } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -242,8 +242,46 @@ function posCatalog(en: boolean): PosCatalog {
       ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
+    loyalty: { stamps: 4, max_per_sale: 4 },
   };
 }
+// ---- Loyalty cards (API 1.11): invented customers and numbers; 4 paid drinks make a free drink, as on the store.
+const DAY = 86400000;
+const loyCards: (LoyaltyCard & { first: number; last: number })[] = [
+  ['K7Q49XM2', 'ريم', 3, 0, 7, 3, 4], ['H3TR8WQ5', 'علي', 1, 1, 9, 22, 6], ['P9MZ2KD4', 'سارة', 2, 0, 4, 16, 5], ['B6NC4YT8', 'خالد', 0, 0, 1, 2, 0],
+].map(([code, name, stamps, rewards, visits, ago, gap], i) => {
+  const last = Date.now() - (ago as number) * DAY;
+  return { id: 60 + i, code: (code as string).slice(0, 4) + '-' + (code as string).slice(4), name: name as string, whatsapp: '9733000000' + i, lang: 'ar' as const,
+    stamps: stamps as number, of: 4, need: 4 - (stamps as number), rewards: rewards as number, visits: visits as number, earned: (visits as number) * 2, redeemed: 0,
+    last_visit: new Date(last).toISOString(), ago: (ago as number) + ' يوم', created: null, contacted: null, card_url: 'https://koubbh.com/loyalty/card/' + 'x'.repeat(32) + '/',
+    first: last - (gap as number) * DAY * Math.max(0, (visits as number) - 1), last };
+});
+const loyClean = (c: string) => { let x = c.toUpperCase().replace(/[^A-Z0-9]/g, ''); if (x.startsWith('KOUB') && x.length === 12) x = x.slice(4); return x; };
+const loyFind = (code: string) => loyCards.find((c) => c.code.replace('-', '') === loyClean(code));
+function loyView(c: (typeof loyCards)[number]): LoyaltyCard {
+  const { first, last, ...v } = c; void first; void last;
+  return { ...v, need: 4 - c.stamps, last_visit: c.last ? new Date(c.last).toISOString() : null, history: [] };
+}
+function loySummary(): LoyaltySummary {
+  const now = Date.now();
+  const away = loyCards.map((c) => {
+    const days = Math.floor((now - c.last) / DAY), gap = (c.last - c.first) / Math.max(1, c.visits - 1) / DAY;
+    return c.visits >= 2 && days >= Math.max(10, Math.ceil(1.5 * gap)) && days <= 120 ? { ...loyView(c), days } : null;
+  }).filter((c): c is LoyaltyCard & { days: number } => !!c).sort((a, b) => Number(!!a.contacted) - Number(!!b.contacted) || a.days - b.days);
+  return { rule: { stamps: 4, max_per_sale: 4 }, join_url: 'https://koubbh.com/loyalty/', wallet: { apple: false, google: false },
+    members: loyCards.length, active_30: loyCards.filter((c) => now - c.last < 30 * DAY).length, joined_30: 1, stamps_30: 23, free_30: 3,
+    rewards_waiting: loyCards.reduce((n, c) => n + c.rewards, 0), away };
+}
+function loySale(code: string, drinks: number, redeem: boolean): PosLoyalty {
+  const c = loyFind(code)!;
+  const add = Math.min(4, drinks);
+  if (redeem) { c.rewards--; c.redeemed++; }
+  c.stamps += add; c.earned += add; let earned = 0;
+  while (c.stamps >= 4) { c.stamps -= 4; c.rewards++; earned++; }
+  c.visits++; c.last = Date.now(); c.ago = 'الحين';
+  return { code: c.code, name: c.name, added: add, redeemed: redeem, new_rewards: earned, failed: false, reversed: false, stamps: c.stamps, of: 4, need: 4 - c.stamps, rewards: c.rewards };
+}
+
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   // Same reference and same basket: the same sale (as the store does).
   const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => l.id + 'x' + l.qty).sort().join(',');
@@ -254,8 +292,16 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   for (const l of lines) if (l.row && l.row[3] !== null && l.row[3] < l.qty) throw new Error(en ? l.row[0] + ': the store shows ' + l.row[3] + ' in stock. Fix the stock count first.' : l.row[0] + ': المخزون في النظام ' + l.row[3] + '. عدّل المخزون أول.');
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
   const sub = r3(lines.reduce((s, l) => s + l.row[1] * l.qty, 0));
+  // A card: the dearest drink free when asked, the discount on what is left (the store's rule).
+  const card = p.loyalty ? loyFind(String(p.loyalty)) : undefined;
+  if (p.loyalty && !card) throw new Error(en ? 'No KOUB card with this code. Scan it again.' : 'ما في بطاقة KOUB بهالكود. امسحها مرة ثانية.');
+  const drinkLines = lines.filter((l) => l.id >= 700);
+  const redeem = !!p.loyalty_redeem;
+  if (redeem && (!card || card.rewards < 1 || !drinkLines.length)) throw new Error(en ? 'This card has no free drink yet.' : 'هالبطاقة ما عندها مشروب مجاني للحين.');
+  const free = redeem ? Math.max(...drinkLines.map((l) => l.row[1])) : 0;
   const value = Number(p.discount) || 0;
-  const discount = r3(Math.min(sub, p.discount_type === 'percent' ? (sub * Math.min(100, value)) / 100 : value));
+  const goods = r3(sub - free);
+  const discount = r3(free + Math.min(goods, p.discount_type === 'percent' ? (goods * Math.min(100, value)) / 100 : value));
   const total = r3(sub - discount);
   const method = p.method as PosMethod;
   const given = method === 'cash' && p.cash_given != null ? Number(p.cash_given) : null;
@@ -266,6 +312,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
     ref, id: 900 + posSales.length, number: String(2400 + posSales.length), status: 'completed', date: new Date().toISOString(),
     lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty) })), discount, total, method, method_label: methodLabel(method, en),
     cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
+    loyalty: card ? loySale(String(p.loyalty), drinkLines.reduce((n, l) => n + l.qty, 0) - (free ? 1 : 0), redeem) : null,
   };
   posSales.unshift(sale);
   return sale;
@@ -332,6 +379,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (/^\/loyalty\/\d+\/contacted$/.test(path)) { const c = loyCards.find((x) => x.id === Number(path.split('/')[2])); if (c) c.contacted = new Date().toISOString(); return (c ? loyView(c) : null) as T; }
   if (path === '/orders/quote' || path === '/orders/create') {
     // Demo only: store prices, Bahrain delivery free from 14 like the store; nothing is sent to anyone.
     const en = p.lang === 'en';
@@ -528,6 +576,13 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/loyalty') return loySummary() as T;
+  if (path === '/loyalty/card' || path === '/loyalty/find') {
+    const digits = String(p.phone ?? '').replace(/\D/g, '');
+    const c = path === '/loyalty/card' ? loyFind(String(p.code ?? '')) : loyCards.find((x) => digits && x.whatsapp.endsWith(digits.slice(-8)));
+    if (!c) throw new Error(path === '/loyalty/card' ? 'ما في بطاقة KOUB بهالكود.' : 'ما في بطاقة KOUB لهالرقم.');
+    return loyView(c) as T;
+  }
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {

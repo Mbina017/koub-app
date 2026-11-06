@@ -1,6 +1,7 @@
 // Shop till: tap items to build a sale, take cash, card or BenefitPay, and hand over a receipt.
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
+// A KOUB loyalty card (API 1.11) can be scanned at checkout: paid drinks are stamps, and a free drink waiting can be used.
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
@@ -15,7 +16,10 @@ import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
-import type { PosMethod, PosProduct, PosReceipt } from '../lib/types';
+import type { LoyaltyCard, PosLoyalty, PosMethod, PosProduct, PosReceipt } from '../lib/types';
+import { after, freeDrink, stampsFor } from '../lib/loyalty';
+import { CardScanner } from '../components/CardScanner';
+import { Stamps } from '../components/Stamps';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 
@@ -119,6 +123,7 @@ export default function Pos() {
         lines={lines}
         subtotal={subtotal}
         methods={q.data?.methods ?? []}
+        loyalty={q.data?.loyalty ?? null}
         setQty={setQty}
         onClose={() => setOpen(false)}
         onDone={() => {
@@ -130,8 +135,8 @@ export default function Pos() {
   );
 }
 
-function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
-  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[];
+function Checkout({ open, lines, subtotal, methods, loyalty, setQty, onClose, onDone }: {
+  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[]; loyalty: { stamps: number; max_per_sale: number } | null;
   setQty: (p: PosProduct, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
@@ -146,13 +151,29 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [done, setDone] = useState<PosReceipt | null>(null);
+  const [card, setCard] = useState<LoyaltyCard | null>(null);
+  const [redeem, setRedeem] = useState(false);
+  const [scan, setScan] = useState(false);
   // A new basket is a new sale: the reference only survives retries of the same items.
   const basket = lines.map((l) => l.p.id + 'x' + l.qty).join(',');
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dv = parse(disc);
-  const discount = r3(Math.min(subtotal, discType === 'percent' ? (subtotal * Math.min(100, dv)) / 100 : dv));
-  const total = r3(subtotal - discount);
+  // The store's order: the free drink first, then the discount on what is left.
+  const till = lines.map((l) => ({ price: l.p.price, qty: l.qty, group: l.p.group }));
+  const free = card && redeem && card.rewards > 0 ? freeDrink(till, true) : 0;
+  const goods = r3(subtotal - free);
+  const discount = r3(Math.min(goods, discType === 'percent' ? (goods * Math.min(100, dv)) / 100 : dv));
+  const total = r3(goods - discount);
+  const adds = card && loyalty ? stampsFor(till, free, loyalty.max_per_sale) : 0;
+  const preview = card ? after(card, adds, free > 0) : null;
+  const hasDrink = till.some((l) => l.group === 'drinks');
+
+  const lookup = useMutation({
+    mutationFn: (code: string) => api.loyaltyCard(session, code),
+    onSuccess: (c) => { tick('ok'); setCard(c); setRedeem(false); setScan(false); },
+    onError: (e) => { tick('warn'); showMessage(t('loyNotFound'), e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
+  });
   const cash = given.trim() ? parse(given) : null;
   const change = method === 'cash' && cash !== null ? r3(cash - total) : null;
   const short = change !== null && change < 0;
@@ -161,6 +182,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
     mutationFn: () => api.posSale(session, {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty })), method, discount: dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
+      ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
     onError: (e) => { tick('warn'); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
@@ -168,6 +190,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
 
   const reset = () => {
     setRef(newRef()); setMethod('cash'); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setDone(null); sale.reset();
+    setCard(null); setRedeem(false); setScan(false);
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -190,6 +213,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
             </View>
+            {done.loyalty && <LoyaltyDone l={done.loyalty} />}
             <Button label={t('posShareReceipt')} icon="print" kind="light" onPress={() => sharePdf(receiptHtml(done, lang), 'KOUB-' + done.number, RECEIPT_SIZE).catch(() => {})} />
             {done.whatsapp && (
               <Button label={t('posWhatsappReceipt')} icon="whatsapp" kind="light"
@@ -217,6 +241,38 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
                 ))}
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
+
+              {loyalty && (card ? (
+                <View style={[st.card, { gap: 10 }]}>
+                  <Row gap={10}>
+                    <Icon name="gift" size={20} />
+                    <View style={{ flex: 1 }}>
+                      <Txt size={15} weight="semibold">{card.name}</Txt>
+                      <Muted size={12}>{card.code + ' · ' + t('loyStampsOf', { a: card.stamps, b: card.of })}</Muted>
+                    </View>
+                    <Touch onPress={() => { setCard(null); setRedeem(false); }} style={st.iconBtn} accessibilityLabel={t('loyRemove')}><Icon name="close" size={18} tint={color.muted} /></Touch>
+                  </Row>
+                  <Stamps stamps={card.stamps} of={card.of} rewards={card.rewards} />
+                  {card.rewards > 0 && (
+                    <Touch onPress={() => hasDrink && setRedeem(!redeem)} disabled={!hasDrink} style={[st.redeem, redeem && st.redeemOn, !hasDrink && { opacity: 0.5 }]}>
+                      <Icon name={redeem ? 'check' : 'gift'} size={18} tint={redeem ? color.bg : color.ink} />
+                      <Txt size={14} weight="semibold" tint={redeem ? color.bg : color.ink} style={{ flex: 1 }}>
+                        {hasDrink ? (redeem ? t('loyFreeOn', { x: money(free, lang) }) : t('loyUseFree')) : t('loyAddDrink')}
+                      </Txt>
+                    </Touch>
+                  )}
+                  {preview && <Muted size={13}>{adds > 0 ? t('loyWillAdd', { n: adds }) + (preview.earned ? ' · ' + t('loyWillEarn') : '') : t('loyNoStamp')}</Muted>}
+                </View>
+              ) : (
+                <Touch onPress={() => setScan(true)} style={[st.card, st.scanRow]}>
+                  <Icon name="gift" size={20} />
+                  <View style={{ flex: 1 }}>
+                    <Txt size={15} weight="semibold">{t('loyScan')}</Txt>
+                    <Muted size={12}>{t('loyScanSub', { n: loyalty.stamps })}</Muted>
+                  </View>
+                  <Icon name="chevron" size={18} tint={color.faint} />
+                </Touch>
+              ))}
 
               <Txt size={14} weight="semibold">{t('posDiscount')}</Txt>
               <Row gap={8}>
@@ -253,6 +309,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
               )}
             </ScrollView>
             <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
+              {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
               {discount > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('posDiscount')}</Muted><Muted>{'−' + money(discount, lang)}</Muted></Row>}
               <Row style={{ justifyContent: 'space-between' }}>
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
@@ -263,7 +320,23 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
           </>
         )}
       </KeyboardAvoidingView>
+      <CardScanner open={scan} busy={lookup.isPending} onCode={(code) => lookup.mutate(code)} onClose={() => setScan(false)} />
     </Modal>
+  );
+}
+
+// After the sale: what the card got, said plainly for the staff to tell the customer.
+function LoyaltyDone({ l }: { l: PosLoyalty }) {
+  const { t } = useSession();
+  if (l.failed) return <View style={[st.card, { backgroundColor: color.amberBg }]}><Txt size={14} weight="semibold" tint={color.amber}>{t('loyFailed', { n: l.name })}</Txt></View>;
+  return (
+    <View style={[st.card, { gap: 10, alignItems: 'center' }]}>
+      <Txt size={15} weight="semibold" center>
+        {l.new_rewards > 0 ? t('loyEarned', { n: l.name }) : l.redeemed ? t('loyRedeemed', { n: l.name }) : l.added > 0 ? t('loyAdded', { n: l.name, a: l.added }) : t('loyNoStampDone', { n: l.name })}
+      </Txt>
+      <Stamps stamps={l.stamps} of={l.of} rewards={l.rewards} />
+      <Muted size={12} center>{l.rewards > 0 ? t('loyRewardsWaiting', { n: l.rewards }) : t('loyNeed', { n: l.need })}</Muted>
+    </View>
   );
 }
 
@@ -282,5 +355,8 @@ const st = StyleSheet.create({
   step: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, justifyContent: 'center' },
   input: { minHeight: 46, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, backgroundColor: color.surface, paddingHorizontal: 12, fontSize: 16, color: color.ink },
   okDot: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.green, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  scanRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  redeem: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.amber, backgroundColor: color.amberBg },
+  redeemOn: { backgroundColor: color.ink, borderColor: color.ink },
   change: { marginTop: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: color.greenBg },
 });
