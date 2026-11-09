@@ -41,7 +41,7 @@ export type OrderSummary = {
   can?: ActionKey[];
 };
 
-export type HomePeriod = 'today' | '7days' | 'month';
+export type HomePeriod = 'today' | 'yesterday' | 'month';
 export type Home = {
   period: { preset: HomePeriod; start: string; end: string };
   profit: { value: number; exact: boolean; change_pct: number | null };

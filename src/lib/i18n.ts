@@ -4,8 +4,8 @@ import type { Lang } from './types';
 const ar = {
   home: 'الرئيسية', orders: 'الطلبات', products: 'المنتجات', numbers: 'الأرقام', more: 'المزيد',
   today: 'اليوم', week: 'الأسبوع', month: 'الشهر', yesterday: 'أمس', days7: '7 أيام', dates: 'تاريخ',
-  netProfitToday: 'صافي ربح اليوم', netProfitWeek: 'صافي الربح · آخر 7 أيام', netProfitMonth: 'صافي ربح الشهر', netProfit: 'صافي الربح',
-  estimate: 'تقريبي', fromSales: 'من {sales} مبيعات · {orders}', vsYesterday: 'عن أمس', vsWeek: 'عن الأسبوع اللي قبله', vsMonth: 'عن الشهر اللي قبله', vsPrev: 'عن الفترة اللي قبلها',
+  netProfitToday: 'صافي ربح اليوم', netProfitYesterday: 'صافي ربح أمس', netProfitWeek: 'صافي الربح · آخر 7 أيام', netProfitMonth: 'صافي ربح الشهر', netProfit: 'صافي الربح',
+  estimate: 'تقريبي', fromSales: 'من {sales} مبيعات · {orders}', vsYesterday: 'عن أمس', vsDayBefore: 'عن اليوم اللي قبله', vsWeek: 'عن الأسبوع اللي قبله', vsMonth: 'عن الشهر اللي قبله', vsPrev: 'عن الفترة اللي قبلها',
   missingCosts: 'فيه تكاليف ناقصة، فالربح تقريبي',
   needsYou: 'يحتاجك', toPrepare: 'للتحضير', cashWithCourier: 'كاش عند المندوب', giftNeedsAddress: 'هدية تنتظر عنوان', waNotDelivered: 'واتساب ما وصل',
   nothingWaiting: 'ما في شي ينتظر', allCollected: 'كله انحصل', notCollected: '{n} ما انحصل', noneWaiting: 'ما في', allDelivered: 'كله وصل', orderNo: 'طلب #{n}',
@@ -61,8 +61,8 @@ type Key = keyof typeof ar;
 const en: Record<Key, string> = {
   home: 'Home', orders: 'Orders', products: 'Products', numbers: 'Numbers', more: 'More',
   today: 'Today', week: 'Week', month: 'Month', yesterday: 'Yesterday', days7: '7 days', dates: 'Dates',
-  netProfitToday: "Today's net profit", netProfitWeek: 'Net profit · last 7 days', netProfitMonth: 'Net profit this month', netProfit: 'Net profit',
-  estimate: 'estimate', fromSales: 'From {sales} sales · {orders}', vsYesterday: 'vs yesterday', vsWeek: 'vs previous 7 days', vsMonth: 'vs last month', vsPrev: 'vs previous period',
+  netProfitToday: "Today's net profit", netProfitYesterday: "Yesterday's net profit", netProfitWeek: 'Net profit · last 7 days', netProfitMonth: 'Net profit this month', netProfit: 'Net profit',
+  estimate: 'estimate', fromSales: 'From {sales} sales · {orders}', vsYesterday: 'vs yesterday', vsDayBefore: 'vs the day before', vsWeek: 'vs previous 7 days', vsMonth: 'vs last month', vsPrev: 'vs previous period',
   missingCosts: 'Some costs are missing, so profit is approximate',
   needsYou: 'Needs you', toPrepare: 'To prepare', cashWithCourier: 'Cash with courier', giftNeedsAddress: 'Gift needs address', waNotDelivered: 'WhatsApp not delivered',
   nothingWaiting: 'Nothing waiting', allCollected: 'All collected', notCollected: '{n} not collected', noneWaiting: 'None waiting', allDelivered: 'All delivered', orderNo: 'Order #{n}',

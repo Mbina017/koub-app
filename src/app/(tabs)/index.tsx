@@ -45,7 +45,7 @@ export default function Home() {
 
   return (
     <Screen header={header} refreshing={q.isRefetching} onRefresh={q.refetch}>
-      <Segmented items={[['today', t('today')], ['7days', t('week')], ['month', t('month')]]} value={period} onChange={setPeriod} />
+      <Segmented items={[['today', t('today')], ['yesterday', t('yesterday')], ['month', t('month')]]} value={period} onChange={setPeriod} />
       {q.isError && !d ? <ErrorState onRetry={q.refetch} /> : !d ? <HomeSkeleton /> : <HomeBody d={d} period={period} />}
     </Screen>
   );
@@ -54,8 +54,8 @@ export default function Home() {
 function HomeBody({ d, period }: { d: HomeData; period: HomePeriod }) {
   const { t, lang } = useSession();
   const change = pct(d.profit.change_pct);
-  const label = { today: t('netProfitToday'), '7days': t('netProfitWeek'), month: t('netProfitMonth') }[period];
-  const vs = { today: t('vsYesterday'), '7days': t('vsWeek'), month: t('vsMonth') }[period];
+  const label = { today: t('netProfitToday'), yesterday: t('netProfitYesterday'), month: t('netProfitMonth') }[period];
+  const vs = { today: t('vsYesterday'), yesterday: t('vsDayBefore'), month: t('vsMonth') }[period];
   const n = d.needs;
   const prepBy = (
     [['bahrain', t('bahrain')], ['international', t('gcc')], ['pickup', t('pickup')], ['unknown', t('noAddress')]] as const

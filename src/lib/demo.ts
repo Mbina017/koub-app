@@ -135,7 +135,7 @@ function home(period: string): Home {
     },
     work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0), unpaid: { count: unpaidList().count, value: unpaidList().value } }; })(),
     stock: { low: 2, out: 2 },
-    visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
+    visitors: { visitors: period === 'month' ? 4310 : 184, pageviews: period === 'month' ? 12870 : 512, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
     shop: (() => { const b = posBooks(period === '7days' ? '7days' : period, false); return { sales: b.sales, count: b.count, expenses: b.expenses, profit: b.profit, exact: b.exact }; })(),
   };
