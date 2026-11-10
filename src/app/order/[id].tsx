@@ -162,6 +162,54 @@ function NoteBox({ o }: { o: Order }) {
 }
 
 // Delivery details from the phone (API 1.3): the order screen's own fields and checks; the store logs the change.
+// Staff add the gift recipient's address they got another way (API 1.14). Saved like the recipient's own link.
+type GiftAddressInput = { house: string; road: string; block: string; area: string; instructions: string; phone: string };
+function GiftAddressEditor({ o }: { o: Order }) {
+  const session = useApiSession();
+  const { t, lang } = useSession();
+  const [open, setOpen] = useState(false);
+  const empty: GiftAddressInput = { house: '', road: '', block: '', area: '', instructions: '', phone: '' };
+  const [v, setV] = useState<GiftAddressInput>(empty);
+  const update = useOrderUpdate(o.id);
+  const bh = (o.gift?.country || 'BH') === 'BH';
+  const needPhone = !!o.gift?.need_phone;
+  const ready = !!(v.house.trim() && v.road.trim() && v.block.trim() && v.area.trim() && (!needPhone || v.phone.trim()));
+  const save = useMutation({
+    mutationFn: () => api.orderGiftAddress(session, o.id, { ...v, phone: needPhone ? v.phone : '' }),
+    onSuccess: (data) => { update(data); setOpen(false); tap('select'); showMessage(t('save'), t('giftAddressSaved')); },
+    onError: (e) => showMessage(t('notSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+  });
+  const field = (k: keyof GiftAddressInput, label: string, opts: { phone?: boolean; multiline?: boolean } = {}) => (
+    <View style={{ gap: 4, flex: 1 }}>
+      <Txt size={13} weight="medium" tint={color.muted}>{label}</Txt>
+      <TextInput value={v[k]} onChangeText={(x) => setV({ ...v, [k]: x })} keyboardType={opts.phone ? 'phone-pad' : 'default'} multiline={opts.multiline} maxLength={k === 'instructions' ? 300 : k === 'phone' ? 30 : 100}
+        style={[st.note, { flex: 0, textAlign: opts.phone ? 'left' : lang === 'ar' ? 'right' : 'left', fontFamily: font.regular }, opts.phone && { writingDirection: 'ltr' }]} />
+    </View>
+  );
+  if (!open) return (
+    <Touch onPress={() => { setV(empty); setOpen(true); }} style={[st.action, { flex: 0, flexDirection: 'row', justifyContent: 'center', marginTop: space.md }]}>
+      <Icon name="pin" size={18} /><Txt size={14} weight="medium">{t('addGiftAddress')}</Txt>
+    </Touch>
+  );
+  return (
+    <View style={{ gap: space.md, marginTop: space.md }}>
+      <Muted size={13}>{t('addGiftAddressHelp')}</Muted>
+      {field('house', bh ? t('giftHouse') : t('giftBuilding'))}
+      <Row gap={8}>
+        {field('road', bh ? t('giftRoad') : t('giftStreet'))}
+        {field('block', bh ? t('giftBlock') : t('giftZone'))}
+      </Row>
+      {field('area', t('areaLabel'))}
+      {needPhone && field('phone', t('recipientWa'), { phone: true })}
+      {field('instructions', t('giftNotes'), { multiline: true })}
+      <Row gap={8}>
+        <Button label={t('save')} icon="check" loading={save.isPending} disabled={!ready} onPress={() => save.mutate()} style={{ flex: 2 }} />
+        <Button label={t('notNow')} kind="light" onPress={() => setOpen(false)} style={{ flex: 1 }} />
+      </Row>
+    </View>
+  );
+}
+
 function ContactEditor({ o, edit }: { o: Order; edit: ContactEdit }) {
   const session = useApiSession();
   const { t, lang } = useSession();
@@ -306,6 +354,7 @@ function Customer({ o }: { o: Order }) {
         </View>
       )}
       {o.gift?.instagram?.waiting && <InstagramGift o={o} ig={o.gift.instagram} />}
+      {o.gift?.can_add_address && <GiftAddressEditor o={o} />}
       {o.gift?.buyer_sends && o.gift.waiting_address && <View style={[st.inset, { backgroundColor: color.sunken }]}><Muted size={13}>{t('buyerSendsLink')}</Muted></View>}
       {!!o.note && (
         <View style={[st.inset, { backgroundColor: color.sunken }]}>

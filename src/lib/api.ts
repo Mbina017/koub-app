@@ -110,6 +110,8 @@ export const api = {
   // API 1.3: the delivery run and delivery details.
   run: (s: Session) => get<Run>(s, '/run'),
   orderContact: (s: Session, id: number, input: ContactInput) => post<Order>(s, '/orders/' + id + '/contact', { ...input, lang: appLang }),
+  // API 1.14: staff add a gift recipient's address.
+  orderGiftAddress: (s: Session, id: number, input: { house: string; road: string; block: string; area: string; instructions: string; phone: string }) => post<Order>(s, '/orders/' + id + '/gift-address', { ...input, lang: appLang }),
   // API 1.9: change the items (the store checks stock and the total), and clear an amount owed back once refunded.
   orderItems: (s: Session, id: number, input: ItemsInput) => post<Order>(s, '/orders/' + id + '/items', { ...input, lang: appLang }),
   refundOwedDone: (s: Session, id: number) => post<Order>(s, '/orders/' + id + '/refund-owed', { lang: appLang }),
