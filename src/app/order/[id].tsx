@@ -161,7 +161,6 @@ function NoteBox({ o }: { o: Order }) {
   );
 }
 
-// Delivery details from the phone (API 1.3): the order screen's own fields and checks; the store logs the change.
 // Staff add the gift recipient's address they got another way (API 1.14). Saved like the recipient's own link.
 type GiftAddressInput = { house: string; road: string; block: string; area: string; instructions: string; phone: string };
 function GiftAddressEditor({ o }: { o: Order }) {
@@ -176,8 +175,8 @@ function GiftAddressEditor({ o }: { o: Order }) {
   const ready = !!(v.house.trim() && v.road.trim() && v.block.trim() && v.area.trim() && (!needPhone || v.phone.trim()));
   const save = useMutation({
     mutationFn: () => api.orderGiftAddress(session, o.id, { ...v, phone: needPhone ? v.phone : '' }),
-    onSuccess: (data) => { update(data); setOpen(false); tap('select'); showMessage(t('save'), t('giftAddressSaved')); },
-    onError: (e) => showMessage(t('notSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+    onSuccess: (data) => { update(data); setOpen(false); tap('select'); showMessage(t('giftAddressSaved'), o.gift?.name || ''); },
+    onError: (e) => showMessage(t('giftAddressNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('giftAddressNeedsSite') : e.message),
   });
   const field = (k: keyof GiftAddressInput, label: string, opts: { phone?: boolean; multiline?: boolean } = {}) => (
     <View style={{ gap: 4, flex: 1 }}>
@@ -210,6 +209,7 @@ function GiftAddressEditor({ o }: { o: Order }) {
   );
 }
 
+// Delivery details from the phone (API 1.3): the order screen's own fields and checks; the store logs the change.
 function ContactEditor({ o, edit }: { o: Order; edit: ContactEdit }) {
   const session = useApiSession();
   const { t, lang } = useSession();
