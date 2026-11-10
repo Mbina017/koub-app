@@ -194,7 +194,7 @@ function order(id: number): Order {
     customer: { name: o.name, initial: o.name.slice(0, 1), phone: '+973 3••• ••' + String(10 + (o.id % 89)), whatsapp: null, call: null, orders: (o.id % 3) + 1, position: (o.id % 3) + 1, spent: Math.round(o.total * ((o.id % 3) + 1) * 1000) / 1000 },
     address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : [contactOf(o).address, contactOf(o).city].filter(Boolean).join(' · '), country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
     contact_edit: o.cancelled ? null : { fields: o.kind === 'gift' ? ['whatsapp', 'recipient'] : o.kind === 'pickup' ? ['whatsapp', 'call'] : ['whatsapp', 'call', 'address'], values: { ...contactOf(o), recipient: o.kind === 'gift' ? '+97336000047' : '' }, out_for_delivery: done && o.kind !== 'pickup' },
-    gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
+    gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', whatsapp: '97333000047', call: '97333000047', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
     note: o.id % 5 === 0 ? 'لو سمحت التوصيل بعد الساعة 6' : '',
     items,
     totals: { discount: 0, fees: [], shipping, refunded: 0, total: o.total },

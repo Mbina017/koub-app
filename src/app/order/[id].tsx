@@ -247,6 +247,14 @@ function Customer({ o }: { o: Order }) {
   const [copied, setCopied] = useState(false);
   const c = o.customer;
   const address = o.pickup ? t('pickupFromKoub') : o.gift?.waiting_address ? t('waitingRecipient') : o.address_link ? t('waitingCustomerAddress') : o.address.text || t('noAddress');
+  const [giftCopied, setGiftCopied] = useState(false);
+  const copyGift = async () => {
+    if (!o.gift) return;
+    await Clipboard.setStringAsync([o.gift.name, o.gift.call ? '+' + o.gift.call : ''].filter(Boolean).join('\n'));
+    tap('select');
+    setGiftCopied(true);
+    setTimeout(() => setGiftCopied(false), 1600);
+  };
   const copyAll = async () => {
     await Clipboard.setStringAsync([o.gift ? o.gift.name : c.name, o.pickup ? '' : o.address.text].filter(Boolean).join('\n'));
     tap('select');
@@ -287,6 +295,14 @@ function Customer({ o }: { o: Order }) {
           {o.gift.phone && <Muted size={12} ltr style={{ textAlign: lang === 'ar' ? 'right' : 'left' }}>{o.gift.phone}</Muted>}
           <Muted size={12}>{o.gift.anonymous ? t('senderHidden') : t('senderShown')}</Muted>
           {!!o.gift.message && <Txt size={14} style={{ marginTop: 6, fontStyle: 'italic' }}>{'“' + o.gift.message + '”'}</Txt>}
+          {/* The recipient can be reached directly, like the buyer (API 1.13). */}
+          {(o.gift.whatsapp || o.gift.call) && (
+            <Row gap={8} style={{ marginTop: space.sm }}>
+              <Action icon="whatsapp" label={t('whatsapp')} disabled={!o.gift.whatsapp} onPress={() => Linking.openURL('https://wa.me/' + o.gift!.whatsapp)} />
+              <Action icon="phone" label={t('call')} disabled={!o.gift.call} onPress={() => Linking.openURL('tel:+' + o.gift!.call)} />
+              <Action icon={giftCopied ? 'check' : 'copy'} label={giftCopied ? t('copied') : t('copy')} onPress={copyGift} />
+            </Row>
+          )}
         </View>
       )}
       {o.gift?.instagram?.waiting && <InstagramGift o={o} ig={o.gift.instagram} />}

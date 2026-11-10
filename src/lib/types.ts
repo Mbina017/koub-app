@@ -122,7 +122,7 @@ export type Order = {
   refund_owed?: number | null;
   // API 1.10: `instagram` when KOUB reaches the recipient on Instagram (staff send the address link by hand);
   // `buyer_sends` when the buyer sends the private link on themselves from their receipt page.
-  gift: { name: string; phone: string | null; anonymous: boolean; message: string; waiting_address: boolean; instagram?: GiftInstagram | null; buyer_sends?: boolean } | null;
+  gift: { name: string; phone: string | null; whatsapp?: string | null; call?: string | null; anonymous: boolean; message: string; waiting_address: boolean; instagram?: GiftInstagram | null; buyer_sends?: boolean } | null;
   // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
   address_link?: { message: string; lang: string } | null;
   note: string;
