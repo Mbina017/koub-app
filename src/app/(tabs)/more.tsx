@@ -76,6 +76,7 @@ export default function More() {
         <Item icon="users" label={t('newOrder')} sub={t('newOrderHint')} onPress={() => router.push('/order-new')} />
         <Item icon="numbers" label={cashier ? t('myToday') : t('posToday')} onPress={() => router.push('/pos-today')} />
         <Item icon="lock" label={t('closeDay')} sub={t('closeDayHint')} onPress={() => router.push('/pos-close' as never)} last={cashier} />
+        {!cashier && <Item icon="check" label={t('golive')} sub={t('goliveHint')} onPress={() => router.push('/pos-golive' as never)} />}
         {!cashier && <Item icon="numbers" label={t('staffReport')} sub={t('staffReportHint')} onPress={() => router.push('/team-report' as never)} />}
         {!cashier && <Item icon="users" label={t('staffTitle')} sub={t('staffHint')} onPress={() => router.push('/team' as never)} last />}
       </Card>

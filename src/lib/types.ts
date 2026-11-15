@@ -315,20 +315,33 @@ export type PosReceipt = {
   voidable: boolean;
   repeat?: boolean;
   pay_ref?: string | null;
+  // API 1.26: a cancelled sale: what happened to the money.
+  refund?: { state: RefundState; ref: string | null; amount: number } | null;
 };
+export type RefundState = 'done' | 'owed' | 'none';
+export type CancelReason = 'mistake' | 'changed' | 'unpaid' | 'other';
+export type PosCancelInput = { owner_pin?: string; reason: CancelReason; reason_note?: string; refund: RefundState; refund_ref?: string; made?: boolean };
+export type RefundOwed = { id: number; no: number | null; number: string; date: string | null; amount: number; method: PosMethod; pay_ref: string | null; name: string; whatsapp: string | null; training: boolean };
+// Go-live list (API 1.26), owner only.
+export type GoliveCheck = { key: 'staff' | 'pin' | 'benefit_qr' | 'pay_ref' | 'stock' | 'practice_close' | 'refunds' | 'training'; ok: boolean | null; active?: number; pending?: number; mode?: string; managed?: number; zero?: number; closes?: number; owed?: number; on?: boolean; sales?: number };
+export type PosGolive = { checks: GoliveCheck[]; training: boolean; deleted?: number };
 // End-of-day close (API 1.25).
 export type CloseMethod = 'card' | 'benefit';
 export type PosCloseInput = { date?: string; counted: Record<CloseMethod, number>; counts?: Partial<Record<CloseMethod, number>>; note?: string };
 export type PosCloseEntry = { at: string | null; by: string | null; counted: Record<CloseMethod, number>; counts: Partial<Record<CloseMethod, number | null>>; note: string;
   expected: Record<CloseMethod, { count: number; total: number }>; diff: Record<CloseMethod, number>; ok: boolean; training?: boolean };
-export type PosCloseSale = { id: number; no: number | null; date: string | null; method: PosMethod; total: number; kept: number; pay_ref: string | null; dup_of: number | null; void: boolean; staff: string | null };
+export type PosCloseSale = { id: number; no: number | null; date: string | null; method: PosMethod; total: number; kept: number; pay_ref: string | null; dup_of: number | null; void: boolean; staff: string | null; refund?: { state: RefundState; ref: string | null } | null };
 export type PosCloseReport = {
   date: string;
-  expected: { by_method: Record<CloseMethod, { count: number; total: number; missing_ref: number }>; total: number; void: { count: number; total: number }; refunds: number; dup_refs: number; sales: PosCloseSale[]; training: boolean };
+  expected: { by_method: Record<CloseMethod, { count: number; total: number; missing_ref: number }>; total: number; void: { count: number; total: number }; refunds: number; dup_refs: number; sales: PosCloseSale[]; training: boolean;
+    // API 1.26: cancelled sales whose money the shop still held at the end of the day; money given back today for
+    // earlier sales; drinks made and then cancelled.
+    held?: number; refunded_earlier?: { id: number; no: number | null; method: PosMethod; amount: number; ref: string | null }[]; waste?: { name: string; qty: number; no: number | null }[] };
   closes: PosCloseEntry[];
   // The last close against the sales as they are now (a sale cancelled after the close shows here).
   diff_now: Record<CloseMethod, number> | null;
   days: { date: string; closed: boolean; ok: boolean | null; diff: number | null; attempts: number }[];
+  refunds_owed?: RefundOwed[];
 };
 export type PosToday = {
   // null for a cashier (API 1.19): staff see their sales only to cancel one, never how much they sold.

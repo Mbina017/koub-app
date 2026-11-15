@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -132,7 +132,12 @@ export const api = {
   posCloseSave: (s: Session, c: PosCloseInput) => post<{ saved: true; date: string } | PosCloseReport>(s, '/pos/close', { ...c, lang: appLang }),
   posClose: (s: Session, date = '') => get<PosCloseReport>(s, '/pos/close', { date }),
   // A cashier cancels with the owner PIN (API 1.15); the owner sends none.
-  posVoid: (s: Session, id: number, ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { owner_pin: ownerPin, lang: appLang }),
+  posVoid: (s: Session, id: number, c: PosCancelInput) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { ...c, lang: appLang }),
+  // A refund still owed (API 1.26), given back later with its number; "none" needs the owner (or the PIN).
+  posRefund: (s: Session, id: number, state: 'done' | 'none', ref = '', ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/refund', { state, ref, owner_pin: ownerPin, lang: appLang }),
+  // Go-live list (API 1.26), owner only.
+  posGolive: (s: Session) => get<PosGolive>(s, '/pos/golive'),
+  posGoliveAct: (s: Session, action: 'training_off' | 'training_on' | 'clear_training', confirm: string) => post<PosGolive>(s, '/pos/golive', { action, confirm, lang: appLang }),
   // Till staff (API 1.15), owner only: cashier accounts, the owner PIN and who sold what.
   posStaff: (s: Session) => get<PosStaffList>(s, '/pos/staff'),
   posStaffAdd: (s: Session, name: string) => post<PosStaffSecret>(s, '/pos/staff/add', { name, lang: appLang }),

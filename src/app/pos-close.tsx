@@ -161,6 +161,9 @@ function OwnerView({ r, day, setDay, form, label }: { r: PosCloseReport; day: st
         ))}
         {e.dup_refs > 0 && <Row gap={6}><Icon name="warn" size={16} tint={color.red} /><Txt size={13} tint={color.red}>{t('closeDupRefs', { n: e.dup_refs })}</Txt></Row>}
         {e.void.count > 0 && <Muted size={13}>{t('closeVoids', { n: e.void.count, x: money(e.void.total, lang) })}</Muted>}
+        {!!e.held && <Muted size={13}>{t('closeHeld', { n: e.held })}</Muted>}
+        {!!e.refunded_earlier?.length && <Muted size={13}>{t('closeBackToday', { x: e.refunded_earlier.map((b) => (b.no ? '#' + b.no + ' ' : '') + money(b.amount, lang)).join('، ') })}</Muted>}
+        {!!e.waste?.length && <Muted size={13}>{t('closeWaste', { x: e.waste.map((w) => w.qty + '× ' + w.name).join('، ') })}</Muted>}
       </View>
 
       {r.closes.length > 0 && (
@@ -178,6 +181,8 @@ function OwnerView({ r, day, setDay, form, label }: { r: PosCloseReport; day: st
           ))}
         </View>
       )}
+
+      {!!r.refunds_owed?.length && <RefundsOwed list={r.refunds_owed} />}
 
       {form}
 
@@ -199,6 +204,44 @@ function OwnerView({ r, day, setDay, form, label }: { r: PosCloseReport; day: st
   );
 }
 
+// Money still owed to customers after a cancel (API 1.26): given back with the refund number, or marked not taken.
+function RefundsOwed({ list }: { list: NonNullable<PosCloseReport['refunds_owed']> }) {
+  const session = useApiSession();
+  const { t, lang } = useSession();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState<number | null>(null);
+  const [ref, setRef] = useState('');
+  const m = useMutation({
+    mutationFn: (v: { id: number; state: 'done' | 'none' }) => api.posRefund(session, v.id, v.state, ref.trim()),
+    onSuccess: () => { setOpen(null); setRef(''); qc.invalidateQueries({ queryKey: ['pos-close'] }); qc.invalidateQueries({ queryKey: ['pos-golive'] }); },
+    onError: (e) => showMessage(t('notUpdated'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+  });
+  return (
+    <View style={[st.card, { gap: 8, borderWidth: 1, borderColor: color.amber }]}>
+      <Txt size={15} weight="semibold" tint={color.amber}>{t('refundsOwed') + ' · ' + list.length}</Txt>
+      {list.map((r) => (
+        <View key={r.id} style={{ gap: 6, paddingVertical: 4 }}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Txt size={14} weight="semibold">{(r.no ? '#' + r.no + ' · ' : '') + money(r.amount, lang)}</Txt>
+              <Muted size={12}>{[dayLabel((r.date ?? '').slice(0, 10), lang), r.method === 'benefit' ? t('posBenefit') : t('posCard'), r.pay_ref, r.name].filter(Boolean).join(' · ')}</Muted>
+            </View>
+            {open !== r.id && <Touch onPress={() => { setOpen(r.id); setRef(''); }} style={st.smallBtn}><Txt size={13} weight="semibold">{t('refundGive')}</Txt></Touch>}
+          </Row>
+          {open === r.id && (
+            <Row gap={8}>
+              <TextInput value={ref} onChangeText={setRef} autoCapitalize="characters" autoCorrect={false} placeholder={r.method === 'benefit' ? t('refundRefBenefit') : t('refundRefCard')} placeholderTextColor={color.faint}
+                style={[st.input, { flex: 1, minWidth: 0, textAlign: 'left', writingDirection: 'ltr', fontFamily: font.regular }]} />
+              <Button label={t('refundGive')} loading={m.isPending} disabled={ref.replace(/[^A-Za-z0-9]/g, '').length < 4 || m.isPending} onPress={() => m.mutate({ id: r.id, state: 'done' })} />
+            </Row>
+          )}
+          {open === r.id && <Touch onPress={() => m.mutate({ id: r.id, state: 'none' })} style={{ alignSelf: 'flex-start', paddingVertical: 4 }}><Muted size={12}>{t('refundNone')}</Muted></Touch>}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const st = StyleSheet.create({
   top: { paddingHorizontal: space.md, paddingBottom: space.sm, gap: 4, backgroundColor: color.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -207,6 +250,7 @@ const st = StyleSheet.create({
   okDot: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.green, alignItems: 'center', justifyContent: 'center' },
   day: { width: 64, paddingVertical: 8, borderRadius: radius.md, backgroundColor: color.surface, alignItems: 'center', gap: 2 },
   dayOn: { backgroundColor: color.ink },
+  smallBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: color.sunken },
   head: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line, paddingBottom: 6 },
   cell: { flex: 1, textAlign: 'center' },
 });

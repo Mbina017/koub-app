@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { CloseMethod, PosCloseEntry, PosCloseReport, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { CloseMethod, PosCloseEntry, PosCloseReport, PosGolive, RefundState, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -318,6 +318,16 @@ function posToday(): PosToday {
   return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
     sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
 }
+// Go-live list (API 1.26), demo only.
+let demoTraining = true;
+function posGolive(): PosGolive {
+  const owed = posSales.filter((s) => s.refund?.state === 'owed').length;
+  return { training: demoTraining, checks: [
+    { key: 'staff', ok: false, active: 2, pending: 1 }, { key: 'pin', ok: true }, { key: 'benefit_qr', ok: true }, { key: 'pay_ref', ok: true, mode: 'required' },
+    { key: 'stock', ok: true, managed: 9, zero: 0 }, { key: 'practice_close', ok: demoCloses.length > 0, closes: demoCloses.length },
+    { key: 'refunds', ok: owed === 0, owed }, { key: 'training', ok: !demoTraining, on: demoTraining, sales: posSales.length },
+  ] };
+}
 // End-of-day close (API 1.25), demo only: the comparison of today's demo sales with what was entered.
 const demoCloses: PosCloseEntry[] = [];
 function posClose(): PosCloseReport {
@@ -325,12 +335,17 @@ function posClose(): PosCloseReport {
   const by = { card: { count: 0, total: 0, missing_ref: 0 }, benefit: { count: 0, total: 0, missing_ref: 0 } } as PosCloseReport['expected']['by_method'];
   const live = posSales.filter((s) => s.status === 'completed' && s.method !== 'cash');
   for (const s of live) { const b = by[s.method as CloseMethod]; b.count++; b.total = r3(b.total + s.total); if (!s.pay_ref) b.missing_ref++; }
+  // Cancelled, money still owed: the shop still holds it (as the store counts it).
+  const held = posSales.filter((s) => s.status === 'cancelled' && s.refund?.state === 'owed' && s.method !== 'cash');
+  for (const s of held) { const b = by[s.method as CloseMethod]; b.total = r3(b.total + s.total); }
   const voids = posSales.filter((s) => s.status === 'cancelled');
   const last = demoCloses[demoCloses.length - 1];
   const today = ymd(new Date());
+  const owedList = posSales.filter((s) => s.refund?.state === 'owed').map((s) => ({ id: s.id, no: s.no ?? null, number: s.number, date: s.date, amount: s.total, method: s.method, pay_ref: s.pay_ref ?? null, name: s.name, whatsapp: s.whatsapp, training: true }));
   return {
+    refunds_owed: owedList,
     date: today,
-    expected: { by_method: by, total: r3(by.card.total + by.benefit.total), void: { count: voids.length, total: r3(voids.reduce((a, s) => a + s.total, 0)) }, refunds: 0, dup_refs: 0, training: true,
+    expected: { held: held.length, by_method: by, total: r3(by.card.total + by.benefit.total), void: { count: voids.length, total: r3(voids.reduce((a, s) => a + s.total, 0)) }, refunds: 0, dup_refs: 0, training: true,
       sales: [...posSales].reverse().map((s) => ({ id: s.id, no: s.no ?? null, date: s.date, method: s.method, total: s.total, kept: s.status === 'cancelled' ? 0 : s.total, pay_ref: s.pay_ref ?? null, dup_of: null, void: s.status === 'cancelled', staff: 'KOUB' })) },
     closes: demoCloses,
     diff_now: last ? { card: r3(last.counted.card - by.card.total), benefit: r3(last.counted.benefit - by.benefit.total) } : null,
@@ -347,9 +362,13 @@ function posCloseSave(p: Record<string, unknown>, en: boolean): PosCloseReport {
   demoCloses.push({ at: new Date().toISOString(), by: 'KOUB', counted: c, counts: {}, note: String(p.note ?? ''), expected: { card: { count: exp.card.count, total: exp.card.total }, benefit: { count: exp.benefit.count, total: exp.benefit.total } }, diff, ok: !diff.card && !diff.benefit, training: true });
   return posClose();
 }
-function posVoid(id: number, en: boolean): PosReceipt {
+function posVoid(id: number, en: boolean, p: Record<string, unknown> = {}): PosReceipt {
   const s = posSales.find((x) => x.id === id);
   if (!s || s.status !== 'completed') throw new Error(en ? 'Only a shop sale from today can be cancelled here.' : 'بس بيع المحل من اليوم ينلغى من هني.');
+  const state = (p.reason === 'unpaid' ? 'none' : ['done', 'owed', 'none'].includes(String(p.refund)) ? p.refund : 'owed') as RefundState;
+  const ref = String(p.refund_ref ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (state === 'done' && ref.length < 4) throw new Error(en ? 'Enter the refund number from the card machine or BenefitPay.' : 'اكتب رقم الاسترجاع من المكينة أو بنفت.');
+  s.refund = { state, ref: state === 'done' ? ref : null, amount: s.total };
   s.status = 'cancelled'; s.voidable = false;
   for (const l of s.lines) { const row = catalog.find((c) => c[0] === l.name); if (row && row[3] !== null) row[3] += l.qty; }
   return s;
@@ -431,7 +450,21 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
       address_state: pickup ? '' : saved ? 'received' : 'awaiting_address', message_state: pickup || saved ? '' : 'sent', link: pickup || saved ? null : 'https://koubbh.com/address/#' + 'a'.repeat(64), lang: String(p.message_lang ?? 'ar') } as T;
   }
   if (/^\/orders\/\d+\/address-link$/.test(path)) return { id: 990, number: '990', total: 0, method_label: '', name: '', whatsapp: '', pickup: false, address_state: 'awaiting_address', message_state: 'sent', link: 'https://koubbh.com/address/#' + 'b'.repeat(64), lang: 'ar' } as T;
-  if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en') as T;
+  if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en', p) as T;
+  if (/^\/pos\/sale\/\d+\/refund$/.test(path)) {
+    const s = posSales.find((x) => x.id === Number(path.split('/')[3]));
+    if (!s?.refund || s.refund.state !== 'owed') throw new Error(p.lang === 'en' ? 'No refund is waiting on this sale.' : 'ما في مبلغ لازم يرجع على هالبيع.');
+    const ref = String(p.ref ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (p.state === 'done' && ref.length < 4) throw new Error(p.lang === 'en' ? 'Enter the refund number.' : 'اكتب رقم الاسترجاع.');
+    s.refund = { ...s.refund, state: p.state === 'none' ? 'none' : 'done', ref: p.state === 'done' ? ref : null };
+    return s as T;
+  }
+  if (path === '/pos/golive') {
+    if (String(p.confirm) !== 'KOUB') throw new Error(p.lang === 'en' ? 'Type KOUB to confirm.' : 'اكتب KOUB عشان تأكد.');
+    if (p.action === 'training_off') demoTraining = false; else if (p.action === 'training_on') demoTraining = true;
+    else { if (demoTraining) throw new Error('طفّ التدريب أول، وبعدين امسح مبيعات التدريب.'); const n = posSales.length; posSales.length = 0; return { ...posGolive(), deleted: n } as T; }
+    return posGolive() as T;
+  }
   if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
   if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
   if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
@@ -613,6 +646,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/close') return posClose() as T;
+  if (path === '/pos/golive') return posGolive() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
