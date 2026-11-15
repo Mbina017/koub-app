@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { CloseMethod, PosCloseEntry, PosCloseReport, PosGolive, RefundState, StockUnit, StockView, RecipeItem, Insights, InsightsPeriod, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { AheadSettings, CloseMethod, PosCloseEntry, PosCloseReport, PosGolive, RefundState, StockUnit, StockView, RecipeItem, Insights, InsightsPeriod, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -292,6 +292,7 @@ const demoBar: BarTicket[] = [
   { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
 demoBar.forEach((x) => x.lines.forEach((l, i) => { l.i = i; l.ready = false; }));
+demoBar[1].pickup = new Date(Math.ceil((Date.now() + 20 * 60_000) / 900_000) * 900_000).toISOString();
 // Till staff (API 1.15), demo only.
 let demoPin = false;
 const demoStaff: PosStaff[] = [
@@ -319,6 +320,13 @@ function posToday(): PosToday {
   live.forEach((s) => (by[s.method] = Math.round((by[s.method] + s.total) * 1000) / 1000));
   return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
     sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
+}
+// Order ahead (API 1.29), demo only.
+const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
+function aheadView(): AheadSettings {
+  const now = Date.now(); const first = Math.ceil((now + demoAhead.lead * 60_000) / 900_000) * 900_000;
+  const slots = Array.from({ length: 12 }, (_, i) => first + i * 900_000).map((ms, i) => ({ t: ms / 1000, label: new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' }), free: i === 2 ? 0 : demoAhead.cap - (i % 3) }));
+  return { ...demoAhead, slots, url: 'https://koubbh.com/order' };
 }
 // Ingredient stock and insights (API 1.28), demo only.
 const demoIng: Record<string, { name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number }> = {
@@ -497,6 +505,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
     s.refund = { ...s.refund, state: p.state === 'none' ? 'none' : 'done', ref: p.state === 'done' ? ref : null };
     return s as T;
   }
+  if (path === '/pos/ahead') { Object.assign(demoAhead, { on: !!p.on, from: String(p.from), to: String(p.to), cap: Number(p.cap), lead: Number(p.lead) }); return aheadView() as T; }
   if (path === '/pos/stock/move') {
     const x = demoIng[String(p.id)]; if (!x) throw new Error('not found'); const q = Number(p.qty);
     x.stock = p.why === 'receive' ? x.stock + q : p.why === 'waste' ? x.stock - q : q; return stockView() as T;
@@ -695,6 +704,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/close') return posClose() as T;
   if (path === '/pos/golive') return posGolive() as T;
   if (path === '/pos/stock') return stockView() as T;
+  if (path === '/pos/ahead') return aheadView() as T;
   if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
