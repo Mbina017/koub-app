@@ -59,7 +59,7 @@ export const useLastAlertTap: () => Notifications.NotificationResponse | null | 
 export type AlertTarget =
   | { pathname: '/order/[id]'; params: { id: string } }
   | { pathname: '/pos-close'; params: { date: string } }
-  | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' };
+  | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' | '/work' };
 export function targetFromNotification(r: Notifications.NotificationResponse | null | undefined): AlertTarget | null {
   const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown; date?: unknown } | undefined;
   switch (data?.type) {
@@ -69,6 +69,8 @@ export function targetFromNotification(r: Notifications.NotificationResponse | n
     case 'staff_request': return { pathname: '/team' };
     case 'preorder_ready': return { pathname: '/preorders' };
     case 'sold_out': return { pathname: '/products' };
+    // API 1.31: a customer is in the car outside: the hand-over list.
+    case 'arrived': return { pathname: '/work' };
     // API 1.25 / 1.30: a close that does not match, and the owner's daily summary: open that day's close.
     case 'pos_close':
     case 'pos_summary': return typeof data.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.date) ? { pathname: '/pos-close', params: { date: data.date } } : null;
