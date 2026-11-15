@@ -72,9 +72,10 @@ function Person({ p }: { p: PosStaffRow }) {
       {(['cash', 'card', 'benefit'] as PosMethod[]).map((m) => (
         <Row key={m} style={{ justifyContent: 'space-between' }}><Muted>{label[m]}</Muted><Txt size={14}>{money(p.by_method[m] ?? 0, lang)}</Txt></Row>
       ))}
-      {(p.discount_count > 0 || p.voids > 0 || p.refunds > 0 || (p.free_count ?? 0) > 0) && (
+      {(p.discount_count > 0 || p.voids > 0 || p.refunds > 0 || (p.free_count ?? 0) > 0 || (p.orders ?? 0) > 0) && (
         <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 2 }}>
           {p.discount_count > 0 && <TagChip label={t('rpDiscounts') + ' ' + p.discount_count + ' · ' + money(p.discounts, lang)} tone="amber" small />}
+          {(p.orders ?? 0) > 0 && <TagChip label={t('rpOrders') + ' ' + p.orders + ' · ' + money(p.orders_total ?? 0, lang)} tone="neutral" small />}
           {(p.free_count ?? 0) > 0 && <TagChip label={t('rpFree') + ' ' + p.free_count + ' · ' + money(p.free ?? 0, lang)} tone="blue" small />}
           {p.voids > 0 && <TagChip label={t('rpVoids') + ' ' + p.voids + ' · ' + money(p.void_total, lang)} tone="red" small />}
           {p.refunds > 0 && <TagChip label={t('rpRefunds') + ' ' + money(p.refunds, lang)} tone="muted" small />}
@@ -94,8 +95,8 @@ function Event({ e, first, when }: { e: PosStaffEvent; first: boolean; when: str
         <Muted size={12}>{[when, how].filter(Boolean).join(' · ')}</Muted>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
-        <TagChip label={e.kind === 'void' ? t('rpVoid') : e.kind === 'free' ? t('rpFree') : t('rpDiscount')} tone={e.kind === 'void' ? 'red' : e.kind === 'free' ? 'blue' : 'amber'} small />
-        <Txt size={13} weight="semibold">{money(e.kind === 'void' ? e.total : e.amount ?? 0, lang)}</Txt>
+        <TagChip label={e.kind === 'void' ? t('rpVoid') : e.kind === 'free' ? t('rpFree') : e.kind === 'order' ? t('rpOrder') + (e.method ? ' · ' + e.method : '') : t('rpDiscount')} tone={e.kind === 'void' ? 'red' : e.kind === 'free' ? 'blue' : e.kind === 'order' ? 'neutral' : 'amber'} small />
+        <Txt size={13} weight="semibold">{money(e.kind === 'void' || e.kind === 'order' ? e.total : e.amount ?? 0, lang)}</Txt>
       </View>
     </Row>
   );

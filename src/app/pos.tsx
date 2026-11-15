@@ -20,7 +20,8 @@ import { LoyaltyScan } from '../components/LoyaltyScan';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
+// Rounds like the store's PHP round(): 0.30749999… (float error for 0.3075) goes up, so totals always agree.
+const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
 const newRef = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const parse = (s: string) => { const n = Number(s.replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; };
 const tick = (kind: 'light' | 'ok' | 'warn') => {
