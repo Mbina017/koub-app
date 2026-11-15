@@ -288,7 +288,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
 // Barista tickets (API 1.17), demo only.
 const demoBar: BarTicket[] = [
   { id: 5021, number: '5021', no: 7, where: '🚗 لاندكروزر بيضاء', arrived: { at: new Date(Date.now() - 2 * 60_000).toISOString(), spot: 'موقف 12' }, state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش / فانيلا / كراميل لاتيه', qty: 2, drink: true, options: 'فانيلا · ثلج خفيف' }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
-  { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
+  { id: 5022, number: '5022', fire_at: new Date(Date.now() + 25 * 60_000).toISOString(), state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
   { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
 demoBar.forEach((x) => x.lines.forEach((l, i) => { l.i = i; l.ready = false; }));

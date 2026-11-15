@@ -18,6 +18,7 @@ import type { BarTicket, OrderSummary } from '../../lib/types';
 import { Button, Empty, Muted, Row, Screen, Segmented, Skeleton, TagChip, Touch, Txt } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' });
 const minutes = (iso: string | null) => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)) : 0);
 
 export default function Work() {
@@ -27,7 +28,7 @@ export default function Work() {
   const bar = useQuery({ queryKey: ['bar'], queryFn: () => api.bar(session), refetchInterval: 10_000 });
   const prep = useQuery({ queryKey: ['orders', 'work'], queryFn: () => api.orders(session, { view: 'active', prepare: 'all' }), refetchInterval: 30_000 });
   const old = bar.error instanceof ApiError && bar.error.message === 'no_route';
-  const waiting = bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
+  const waiting = bar.data?.tickets.filter((x) => x.state !== 'done' && !(x.fire_at && new Date(x.fire_at).getTime() > Date.now())).length ?? 0;
   const toPrep = prep.data?.orders.length ?? 0;
   // A tablet (or a wide window) shows both lanes side by side.
   const wide = useWindowDimensions().width >= 768;
@@ -93,12 +94,23 @@ function Tips() {
 function HandOver({ tickets }: { tickets: BarTicket[] }) {
   const { t } = useSession();
   const [showDone, setShowDone] = useState(false);
+  // Orders ahead for later wait in their own section until their start time (API 1.32), then join the list.
+  const now = Date.now();
+  const later = (x: BarTicket) => x.state === 'waiting' && !!x.fire_at && new Date(x.fire_at).getTime() > now;
   // Customers waiting in the car outside come first (API 1.31); otherwise oldest first, as the store sends them.
-  const open = tickets.filter((x) => x.state !== 'done').sort((a, b) => Number(!!b.arrived) - Number(!!a.arrived));
+  const open = tickets.filter((x) => x.state !== 'done' && !later(x)).sort((a, b) => Number(!!b.arrived) - Number(!!a.arrived));
+  const scheduled = tickets.filter(later).sort((a, b) => (a.fire_at! < b.fire_at! ? -1 : 1));
+  const [showLater, setShowLater] = useState(false);
   const done = tickets.filter((x) => x.state === 'done');
   return (
     <>
       {open.length === 0 ? <Empty title={t('workBarEmpty')} icon="check" /> : open.map((x) => <Ticket key={x.id} x={x} />)}
+      {scheduled.length > 0 && (
+        <Touch onPress={() => setShowLater(!showLater)} style={{ alignSelf: 'center', paddingVertical: space.sm }}>
+          <Muted>{t('workLater', { n: scheduled.length, t: clock(scheduled[0].fire_at!) }) + (showLater ? '  ▴' : '  ▾')}</Muted>
+        </Touch>
+      )}
+      {showLater && scheduled.map((x) => <Ticket key={x.id} x={x} />)}
       {done.length > 0 && (
         <Touch onPress={() => setShowDone(!showDone)} style={{ alignSelf: 'center', paddingVertical: space.sm }}>
           <Muted>{t('workRecent', { n: done.length }) + (showDone ? '  ▴' : '  ▾')}</Muted>
@@ -154,6 +166,7 @@ function Ticket({ x }: { x: BarTicket }) {
           : <Row key={i} gap={10}>{line}</Row>;
       })}
       {perItem && !done && x.lines.length > 1 && <Muted size={12}>{t('workItemsReady', { r: readyN, n: x.lines.length })}</Muted>}
+      {x.fire_at && x.state === 'waiting' && new Date(x.fire_at).getTime() > Date.now() ? <View style={[st.where, { backgroundColor: color.blueBg }]}><Txt size={15} weight="semibold">{t('workStartAt', { t: clock(x.fire_at) })}</Txt></View> : null}
       {x.arrived && !done ? (
         <View style={st.arrived}><Txt size={16} weight="bold" tint={color.bg}>{t('workArrived', { n: minutes(x.arrived.at) })}</Txt>{x.arrived.spot ? <Txt size={15} weight="semibold" tint={color.bg}>{'📍 ' + x.arrived.spot}</Txt> : null}</View>
       ) : null}
