@@ -36,6 +36,9 @@ export default function Pos() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['pos-catalog'], queryFn: () => api.posCatalog(session) });
+  // What is still to be handed to customers (API 1.19: every sale), one tap away from the till.
+  const bar = useQuery({ queryKey: ['bar'], queryFn: () => api.bar(session), refetchInterval: 15_000, retry: false });
+  const toHand = bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<'all' | 'drinks' | 'products'>('all');
   const [cart, setCart] = useState<Record<number, number>>({});
@@ -78,6 +81,11 @@ export default function Pos() {
           <Txt size={19} weight="bold">{t('pos')}</Txt>
           {cashier && me?.name ? <Muted size={12} lines={1}>{t('posSignedIn', { n: me.name })}</Muted> : null}
         </View>
+        {toHand > 0 && (
+          <Touch onPress={() => router.push('/work' as never)} style={[st.pill, { backgroundColor: color.ink }]}>
+            <Txt size={13} weight="semibold" tint={color.bg}>{t('posHandover', { n: toHand })}</Txt>
+          </Touch>
+        )}
         <Touch onPress={() => router.push('/pos-today' as never)} style={st.pill}>
           <Txt size={13} weight="semibold">{cashier ? t('myToday') : t('posToday')}</Txt>
         </Touch>

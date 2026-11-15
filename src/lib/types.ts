@@ -247,7 +247,7 @@ export type PosProduct = { id: number; name: string; group?: 'drinks' | 'product
 // loyalty: the KOUB card rules (API 1.11+), null when cards are off.
 export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null };
 // A barista ticket (API 1.17): the menu items of one till sale.
-export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number }[] };
+export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean }[] };
 export type BarList = { tickets: BarTicket[]; waiting: number };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
 export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number };
