@@ -336,6 +336,8 @@ export type CancelReason = 'mistake' | 'changed' | 'unpaid' | 'other';
 export type PosCancelInput = { owner_pin?: string; reason: CancelReason; reason_note?: string; refund: RefundState; refund_ref?: string; made?: boolean };
 export type RefundOwed = { id: number; no: number | null; number: string; date: string | null; amount: number; method: PosMethod; pay_ref: string | null; name: string; whatsapp: string | null; training: boolean };
 // Order ahead (API 1.29), owner only: koubbh.com/order.
+// API 1.33: KOUB card offers (owner).
+export type LoyaltyOffers = { birthday: boolean; comeback: boolean; birthdays: number; comeback_days: number };
 export type AheadSettings = { on: boolean; from: string; to: string; cap: number; lead: number; slots: { t: number; label: string; free: number }[]; url: string };
 // Ingredient stock (API 1.28), owner only.
 export type StockUnit = 'g' | 'ml' | 'pc';
