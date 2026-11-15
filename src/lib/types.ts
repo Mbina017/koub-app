@@ -329,6 +329,19 @@ export type RefundState = 'done' | 'owed' | 'none';
 export type CancelReason = 'mistake' | 'changed' | 'unpaid' | 'other';
 export type PosCancelInput = { owner_pin?: string; reason: CancelReason; reason_note?: string; refund: RefundState; refund_ref?: string; made?: boolean };
 export type RefundOwed = { id: number; no: number | null; number: string; date: string | null; amount: number; method: PosMethod; pay_ref: string | null; name: string; whatsapp: string | null; training: boolean };
+// Ingredient stock (API 1.28), owner only.
+export type StockUnit = 'g' | 'ml' | 'pc';
+export type Ingredient = { id: string; name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number; days_left: number | null; is_low: boolean };
+export type RecipeItem = { ing: string; qty: number };
+export type StockProduct = { id: number; name: string; price: number; choices: PosChoice[]; recipe: Record<string, RecipeItem[]>; cost: number | null; margin: number | null };
+export type StockView = { ingredients: Ingredient[]; products: StockProduct[]; log: { at: string | null; ing: string; d: number; why: string; order: number | null; note: string }[] };
+// Shop insights (API 1.28), owner only.
+export type InsightsPeriod = 'today' | '7days' | '30days';
+export type InsightItem = { id: number; name: string; qty: number; total: number; cost: number | null; profit: number | null };
+export type Insights = { period: InsightsPeriod; days: number; count: number; total: number; avg: number; cups: number; per_day: number;
+  hours: { count: number; total: number }[]; busiest_hour: number | null; week: { count: number; total: number }[];
+  wait: Record<'ready' | 'handed', { n: number; median: number | null; p90: number | null }>;
+  top: InsightItem[]; top_money: InsightItem[]; methods: Partial<Record<PosMethod, number>>; cancels: Partial<Record<CancelReason, number>>; waste: { name: string; qty: number }[] };
 // Go-live list (API 1.26), owner only.
 export type GoliveCheck = { key: 'staff' | 'pin' | 'benefit_qr' | 'pay_ref' | 'stock' | 'practice_close' | 'refunds' | 'training'; ok: boolean | null; active?: number; pending?: number; mode?: string; managed?: number; zero?: number; closes?: number; owed?: number; on?: boolean; sales?: number };
 export type PosGolive = { checks: GoliveCheck[]; training: boolean; deleted?: number };
