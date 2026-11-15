@@ -58,7 +58,8 @@ export default function Login() {
 
         <Button label={t('signIn')} onPress={submit} loading={busy === 'in'} disabled={busy === 'demo'} />
         <Button label={t('staffSignUp')} kind="light" icon="users" onPress={() => router.push({ pathname: '/register' as never, params: { site } } as never)} disabled={!!busy} style={{ marginTop: space.md }} />
-        <Button label={t('tryDemo')} kind="ghost" onPress={async () => { setBusy('demo'); try { await signInDemo(); } finally { setBusy(null); } }} loading={busy === 'demo'} disabled={busy === 'in'} style={{ marginTop: space.md }} />
+        {/* No demo on the store's web version (staff only); the phone app keeps it for App Store review. */}
+        {Platform.OS !== 'web' && <Button label={t('tryDemo')} kind="ghost" onPress={async () => { setBusy('demo'); try { await signInDemo(); } finally { setBusy(null); } }} loading={busy === 'demo'} disabled={busy === 'in'} style={{ marginTop: space.md }} />}
       </ScrollView>
     </KeyboardAvoidingView>
   );
