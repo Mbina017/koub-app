@@ -17,7 +17,7 @@ import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
-import type { LoyaltyCard, PosChoice, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
+import type { LoyaltyCard, PosChoice, PayRefMode, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
 import { PosOptions, type PosPick } from '../components/PosOptions';
 import { LoyaltyScan } from '../components/LoyaltyScan';
 import { QrCode } from '../components/QrCode';
@@ -30,6 +30,8 @@ const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
 type Line = { key: string; p: PosProduct; qty: number; choice: PosChoice | null; note: string };
 type CartLine = { key: string; id: number; qty: number; choice: PosChoice | null; note: string };
 const lineKey = (id: number, choice: PosChoice | null, note: string) => id + '|' + (choice?.key ?? '') + '|' + note;
+// Like the store: capitals and digits only (API 1.25).
+const cleanPayRef = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
 const newRef = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const parse = (s: string) => { const n = Number(s.replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; };
 const tick = (kind: 'light' | 'ok' | 'warn') => {
@@ -232,6 +234,7 @@ export default function Pos() {
         subtotal={subtotal}
         methods={q.data?.methods ?? []}
         benefitQr={q.data?.benefit_qr ?? null}
+        payRefMode={q.data?.pay_ref ?? 'off'}
         loyaltyOn={!!q.data?.loyalty}
         setLineQty={setLineQty}
         onClose={() => setOpen(false)}
@@ -269,8 +272,8 @@ function OrderLines({ lines, setLineQty }: { lines: Line[]; setLineQty: (key: st
   );
 }
 
-function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLineQty, onClose, onDone }: {
-  open: boolean; lines: Line[]; subtotal: number; methods: { key: PosMethod; label: string }[]; benefitQr: string | null; loyaltyOn: boolean;
+function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyaltyOn, setLineQty, onClose, onDone }: {
+  open: boolean; lines: Line[]; subtotal: number; methods: { key: PosMethod; label: string }[]; benefitQr: string | null; payRefMode: PayRefMode; loyaltyOn: boolean;
   setLineQty: (key: string, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
@@ -289,6 +292,12 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
   useEffect(() => { if (methods.length && !methods.some((m) => m.key === method)) setMethod(first); }, [methods, method, first]);
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
+  // The payment number (API 1.25): the approval code on the EazyPay receipt, or the BenefitPay transaction number.
+  const [payRef, setPayRef] = useState('');
+  useEffect(() => { setPayRef(''); }, [method]);
+  const payRefClean = cleanPayRef(payRef);
+  const askRef = payRefMode !== 'off' && method !== 'cash';
+  const refMissing = askRef && (payRefMode === 'required' ? payRefClean.length < 4 : payRefClean.length > 0 && payRefClean.length < 4);
   const [given, setGiven] = useState('');
   const [who, setWho] = useState(false);
   const [name, setName] = useState('');
@@ -319,6 +328,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (car.trim() || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(needPin ? { owner_pin: pin.trim() } : {}),
+      ...(askRef && payRefClean ? { pay_ref: payRefClean } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
@@ -326,7 +336,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
   });
 
   const reset = () => {
-    setRef(newRef()); setWhere(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setPayRef(''); setWhere(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -349,7 +359,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
                 </View>
               ) : <View style={st.okDot}><Icon name="check" size={30} tint={color.bg} /></View>}
               <Txt size={28} weight="bold">{money(done.total, lang)}</Txt>
-              <Muted>{done.method_label}{done.repeat ? ' · ' + t('posAlreadySaved') : ''}</Muted>
+              <Muted>{done.method_label}{done.pay_ref ? ' · ' + done.pay_ref : ''}{done.repeat ? ' · ' + t('posAlreadySaved') : ''}</Muted>
               {done.loyalty && !done.loyalty.failed && (
                 <Muted center>{[done.loyalty.redeemed ? t('loyUsed') : '', done.loyalty.added > 0 ? t('loyAdded', { n: done.loyalty.added, name: done.loyalty.name }) : '', done.loyalty.new_rewards > 0 ? t('loyNowFree', { name: done.loyalty.name }) : '', t('loyStamps', { s: done.loyalty.stamps, of: done.loyalty.of })].filter(Boolean).join(' · ')}</Muted>
               )}
@@ -426,6 +436,16 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
                 </View>
               ) : null}
 
+              {askRef && (
+                <View style={{ gap: 6 }}>
+                  <Txt size={14} weight="semibold">{method === 'benefit' ? t('payRefBenefit') : t('payRefCard')}{payRefMode === 'optional' ? ' · ' + t('optional') : ''}</Txt>
+                  <TextInput value={payRef} onChangeText={(v) => setPayRef(v.slice(0, 30))} autoCapitalize="characters" autoCorrect={false} maxLength={30}
+                    placeholder={method === 'benefit' ? t('payRefBenefitPh') : t('payRefCardPh')} placeholderTextColor={color.faint}
+                    style={[input, { textAlign: 'left', writingDirection: 'ltr', letterSpacing: 1 }]} />
+                  <Muted size={12}>{method === 'benefit' ? t('payRefBenefitHint') : t('payRefCardHint')}</Muted>
+                </View>
+              )}
+
               {method === 'cash' && (
                 <>
                   <Txt size={14} weight="semibold">{t('posCashGiven')}</Txt>
@@ -458,7 +478,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || sale.isPending || (needPin && pin.trim().length < 4)} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || sale.isPending || (needPin && pin.trim().length < 4) || refMissing} onPress={() => sale.mutate()} />
             </View>
           </>
         )}

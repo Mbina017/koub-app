@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { CloseMethod, PosCloseEntry, PosCloseReport, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -253,6 +253,7 @@ function posCatalog(en: boolean): PosCatalog {
     training: true,
     benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
     top: [700, 703, 704, 701, 706, 708],
+    pay_ref: 'required',
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
@@ -278,6 +279,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
     no: ++demoNo,
     lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty), options: [demoChoices[l.id - 700]?.find((c) => c.key === l.choice)?.label, l.note].filter(Boolean).join(' · ') })), discount, total, method, method_label: methodLabel(method, en),
     cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
+    pay_ref: p.pay_ref ? String(p.pay_ref) : null,
   };
   posSales.unshift(sale);
   return sale;
@@ -315,6 +317,35 @@ function posToday(): PosToday {
   live.forEach((s) => (by[s.method] = Math.round((by[s.method] + s.total) * 1000) / 1000));
   return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
     sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
+}
+// End-of-day close (API 1.25), demo only: the comparison of today's demo sales with what was entered.
+const demoCloses: PosCloseEntry[] = [];
+function posClose(): PosCloseReport {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const by = { card: { count: 0, total: 0, missing_ref: 0 }, benefit: { count: 0, total: 0, missing_ref: 0 } } as PosCloseReport['expected']['by_method'];
+  const live = posSales.filter((s) => s.status === 'completed' && s.method !== 'cash');
+  for (const s of live) { const b = by[s.method as CloseMethod]; b.count++; b.total = r3(b.total + s.total); if (!s.pay_ref) b.missing_ref++; }
+  const voids = posSales.filter((s) => s.status === 'cancelled');
+  const last = demoCloses[demoCloses.length - 1];
+  const today = ymd(new Date());
+  return {
+    date: today,
+    expected: { by_method: by, total: r3(by.card.total + by.benefit.total), void: { count: voids.length, total: r3(voids.reduce((a, s) => a + s.total, 0)) }, refunds: 0, dup_refs: 0, training: true,
+      sales: [...posSales].reverse().map((s) => ({ id: s.id, no: s.no ?? null, date: s.date, method: s.method, total: s.total, kept: s.status === 'cancelled' ? 0 : s.total, pay_ref: s.pay_ref ?? null, dup_of: null, void: s.status === 'cancelled', staff: 'KOUB' })) },
+    closes: demoCloses,
+    diff_now: last ? { card: r3(last.counted.card - by.card.total), benefit: r3(last.counted.benefit - by.benefit.total) } : null,
+    days: Array.from({ length: 14 }, (_, i) => { const d = ymd(new Date(Date.now() - i * 86_400_000)); const c = i === 0 ? last : i === 2 ? null : { ok: i !== 4, diff: i === 4 ? -1.5 : 0 };
+      return { date: d, closed: !!c, ok: c ? c.ok : null, diff: c ? (i === 0 && last ? r3(last.diff.card + last.diff.benefit) : (c as { diff: number }).diff) : null, attempts: c ? 1 : 0 }; }),
+  };
+}
+function posCloseSave(p: Record<string, unknown>, en: boolean): PosCloseReport {
+  const counted = (p.counted ?? {}) as Record<string, unknown>;
+  for (const m of ['card', 'benefit']) if (counted[m] === undefined || counted[m] === null || Number.isNaN(Number(counted[m])) || Number(counted[m]) < 0) throw new Error(en ? 'Enter the total for the card machine and for BenefitPay (0 if none).' : 'اكتب مجموع مكينة البطاقة ومجموع بنفت باي (0 إذا ما في).');
+  const exp = posClose().expected.by_method;
+  const c = { card: Number(counted.card), benefit: Number(counted.benefit) };
+  const diff = { card: Math.round((c.card - exp.card.total) * 1000) / 1000, benefit: Math.round((c.benefit - exp.benefit.total) * 1000) / 1000 };
+  demoCloses.push({ at: new Date().toISOString(), by: 'KOUB', counted: c, counts: {}, note: String(p.note ?? ''), expected: { card: { count: exp.card.count, total: exp.card.total }, benefit: { count: exp.benefit.count, total: exp.benefit.total } }, diff, ok: !diff.card && !diff.benefit, training: true });
+  return posClose();
 }
 function posVoid(id: number, en: boolean): PosReceipt {
   const s = posSales.find((x) => x.id === id);
@@ -371,6 +402,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/pos/close') return posCloseSave(p, p.lang === 'en') as T;
   if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
   if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); return x as T; }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
@@ -580,6 +612,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/unpaid') return unpaidList() as T;
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
+  if (path === '/pos/close') return posClose() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;

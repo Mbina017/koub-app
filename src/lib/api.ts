@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -128,6 +128,9 @@ export const api = {
   posOut: (s: Session, id: number, out: boolean) => post<{ out: number[] }>(s, '/pos/out', { id, out }),
   posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
   posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
+  // End-of-day close (API 1.25): anyone at the POS sends the totals (blind); only the owner reads the comparison.
+  posCloseSave: (s: Session, c: PosCloseInput) => post<{ saved: true; date: string } | PosCloseReport>(s, '/pos/close', { ...c, lang: appLang }),
+  posClose: (s: Session, date = '') => get<PosCloseReport>(s, '/pos/close', { date }),
   // A cashier cancels with the owner PIN (API 1.15); the owner sends none.
   posVoid: (s: Session, id: number, ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { owner_pin: ownerPin, lang: appLang }),
   // Till staff (API 1.15), owner only: cashier accounts, the owner PIN and who sold what.
