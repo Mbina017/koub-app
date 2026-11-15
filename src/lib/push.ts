@@ -56,14 +56,14 @@ export const useLastAlertTap: () => Notifications.NotificationResponse | null | 
   Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse;
 
 // Where a tapped alert opens, if it is one of ours: the new order, the unfinished payments list, pre-orders or products.
-export type AlertTarget = { pathname: '/order/[id]'; params: { id: string } } | { pathname: '/unpaid' | '/preorders' | '/products' | '/staff' };
+export type AlertTarget = { pathname: '/order/[id]'; params: { id: string } } | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' };
 export function targetFromNotification(r: Notifications.NotificationResponse | null | undefined): AlertTarget | null {
   const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown } | undefined;
   switch (data?.type) {
     case 'new_order': return Number.isInteger(data.order_id) ? { pathname: '/order/[id]', params: { id: String(data.order_id) } } : null;
     case 'unpaid': return { pathname: '/unpaid' };
     // API 1.16: a staff member signed up and waits for approval.
-    case 'staff_request': return { pathname: '/staff' };
+    case 'staff_request': return { pathname: '/team' };
     case 'preorder_ready': return { pathname: '/preorders' };
     case 'sold_out': return { pathname: '/products' };
     default: return null;
