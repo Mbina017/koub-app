@@ -4,7 +4,7 @@
 // number, numbers used twice, cancelled sales, and the last 14 days.
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
@@ -30,7 +30,9 @@ export default function PosClose() {
   const qc = useQueryClient();
   const today = ymd(new Date());
   const yesterday = ymd(new Date(Date.now() - 86_400_000));
-  const [day, setDay] = useState(today);
+  // A tapped close or summary alert opens on its day.
+  const { date } = useLocalSearchParams<{ date?: string }>();
+  const [day, setDay] = useState(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= today ? date : today);
   const [card, setCard] = useState('');
   const [benefit, setBenefit] = useState('');
   const [cardN, setCardN] = useState('');
