@@ -231,7 +231,11 @@ export type StaffMethod = 'cash' | 'card' | 'benefit' | 'transfer';
 export type StaffOrderInput = {
   ref: string; lines: { id: number; qty: number }[]; name: string; phone: string;
   fulfilment: 'delivery' | 'pickup'; country: string; method: StaffMethod; message_lang: Lang; expected_total: number | null; note: string;
+  // API 1.18: reuse this returning customer's last delivery address (an order id from the customer lookup).
+  address_from?: number;
 };
+// A returning customer by number (API 1.18).
+export type CustomerLookup = { found: boolean; phone?: string; name?: string; orders?: number; address?: { from: number; country: string; text: string } | null };
 export type StaffOrder = {
   id: number; number: string; total: number; method_label: string; name: string; whatsapp: string; pickup: boolean;
   address_state: '' | 'awaiting_address' | 'received'; message_state: '' | 'sent' | 'waiting_for_template' | 'failed' | 'not_sent'; link: string | null; lang: string; repeat?: boolean;
