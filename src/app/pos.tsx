@@ -17,6 +17,7 @@ import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
 import type { LoyaltyCard, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
 import { LoyaltyScan } from '../components/LoyaltyScan';
+import { QrCode } from '../components/QrCode';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 
@@ -170,6 +171,7 @@ export default function Pos() {
         lines={lines}
         subtotal={subtotal}
         methods={q.data?.methods ?? []}
+        benefitQr={q.data?.benefit_qr ?? null}
         loyaltyOn={!!q.data?.loyalty}
         setQty={setQty}
         onClose={() => setOpen(false)}
@@ -182,8 +184,8 @@ export default function Pos() {
   );
 }
 
-function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, onDone }: {
-  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[]; loyaltyOn: boolean;
+function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setQty, onClose, onDone }: {
+  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[]; benefitQr: string | null; loyaltyOn: boolean;
   setQty: (p: PosProduct, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
@@ -327,6 +329,14 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
 
               <Txt size={14} weight="semibold">{t('posMethod')}</Txt>
               <Segmented<PosMethod> items={(methods.length ? methods : [{ key: 'card' as PosMethod, label: t('posCard') }]).map((m) => [m.key, m.label])} value={method} onChange={setMethod} />
+              {method === 'benefit' && benefitQr ? (
+                // The customer scans the shop's BenefitPay QR and pays the total; staff complete the sale once it shows as paid.
+                <View style={[st.card, { alignItems: 'center', gap: 8 }]}>
+                  <View style={{ padding: 8, backgroundColor: '#FFFFFF', borderRadius: radius.md }}><QrCode value={benefitQr} size={210} /></View>
+                  <Txt size={22} weight="bold">{money(total, lang)}</Txt>
+                  <Muted center>{t('posBenefitScan')}</Muted>
+                </View>
+              ) : null}
 
               {method === 'cash' && (
                 <>
