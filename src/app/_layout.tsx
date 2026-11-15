@@ -46,7 +46,7 @@ function useAlerts(signedIn: boolean) {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Notifications.addNotificationReceivedListener(() => {
-      for (const k of ['home', 'orders', 'unpaid', 'preorders', 'products']) client.invalidateQueries({ queryKey: [k] });
+      for (const k of ['home', 'orders', 'unpaid', 'preorders', 'products', 'bar']) client.invalidateQueries({ queryKey: [k] });
     });
     return () => sub.remove();
   }, []);

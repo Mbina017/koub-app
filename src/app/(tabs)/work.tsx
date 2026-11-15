@@ -93,7 +93,8 @@ function Tips() {
 function HandOver({ tickets }: { tickets: BarTicket[] }) {
   const { t } = useSession();
   const [showDone, setShowDone] = useState(false);
-  const open = tickets.filter((x) => x.state !== 'done');
+  // Customers waiting in the car outside come first (API 1.31); otherwise oldest first, as the store sends them.
+  const open = tickets.filter((x) => x.state !== 'done').sort((a, b) => Number(!!b.arrived) - Number(!!a.arrived));
   const done = tickets.filter((x) => x.state === 'done');
   return (
     <>
@@ -153,6 +154,9 @@ function Ticket({ x }: { x: BarTicket }) {
           : <Row key={i} gap={10}>{line}</Row>;
       })}
       {perItem && !done && x.lines.length > 1 && <Muted size={12}>{t('workItemsReady', { r: readyN, n: x.lines.length })}</Muted>}
+      {x.arrived && !done ? (
+        <View style={st.arrived}><Txt size={16} weight="bold" tint={color.bg}>{t('workArrived', { n: minutes(x.arrived.at) })}</Txt>{x.arrived.spot ? <Txt size={15} weight="semibold" tint={color.bg}>{'📍 ' + x.arrived.spot}</Txt> : null}</View>
+      ) : null}
       {x.pickup ? <View style={[st.where, { backgroundColor: color.blueBg }]}><Txt size={15} weight="semibold">{t('workPickup', { t: new Date(x.pickup).toLocaleTimeString(lang === 'ar' ? 'ar-BH' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' }) })}</Txt></View> : null}
       {x.where ? <View style={st.where}><Txt size={15} weight="semibold">{x.where}</Txt></View> : null}
       {x.note ? <Muted>{x.note}</Muted> : null}
@@ -210,6 +214,7 @@ function OrderCard({ o, label }: { o: OrderSummary; label?: string }) {
 const st = StyleSheet.create({
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   ready: { borderWidth: 2, borderColor: color.green },
+  arrived: { borderRadius: radius.md, backgroundColor: color.green, paddingHorizontal: 12, paddingVertical: 10, gap: 2 },
   where: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: color.amberBg },
   no: { minWidth: 40, height: 40, borderRadius: 12, paddingHorizontal: 8, backgroundColor: color.ink, justifyContent: 'center', marginEnd: 10 },
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2 },
