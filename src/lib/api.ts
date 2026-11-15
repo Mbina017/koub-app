@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -126,7 +126,15 @@ export const api = {
   posCatalog: (s: Session) => get<PosCatalog>(s, '/pos/catalog'),
   posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
   posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
-  posVoid: (s: Session, id: number) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { lang: appLang }),
+  // A cashier cancels with the owner PIN (API 1.15); the owner sends none.
+  posVoid: (s: Session, id: number, ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { owner_pin: ownerPin, lang: appLang }),
+  // Till staff (API 1.15), owner only: cashier accounts, the owner PIN and who sold what.
+  posStaff: (s: Session) => get<PosStaffList>(s, '/pos/staff'),
+  posStaffAdd: (s: Session, name: string) => post<PosStaffSecret>(s, '/pos/staff/add', { name, lang: appLang }),
+  posStaffPassword: (s: Session, id: number) => post<PosStaffSecret>(s, '/pos/staff/' + id + '/password', { lang: appLang }),
+  posStaffActive: (s: Session, id: number, active: boolean) => post<PosStaffSecret>(s, '/pos/staff/' + id + '/active', { active, lang: appLang }),
+  posOwnerPin: (s: Session, pin: string) => post<{ pin_set: boolean }>(s, '/pos/owner-pin', { pin, lang: appLang }),
+  posStaffReport: (s: Session, period: ShopPeriod) => get<PosStaffReport>(s, '/pos/staff-report', { period }),
   // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),
   posExpenseAdd: (s: Session, e: ShopExpenseInput) => post<{ entry: ShopExpense; repeat?: boolean }>(s, '/pos/expenses', { ...e, lang: appLang }),

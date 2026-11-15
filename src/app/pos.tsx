@@ -14,7 +14,7 @@ import { color, font, radius, space } from '../lib/theme';
 import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
-import { showMessage } from '../lib/confirm';
+import { confirmStep, showMessage } from '../lib/confirm';
 import type { PosMethod, PosProduct, PosReceipt } from '../lib/types';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
@@ -30,7 +30,7 @@ const tick = (kind: 'light' | 'ok' | 'warn') => {
 
 export default function Pos() {
   const session = useApiSession();
-  const { t, lang } = useSession();
+  const { t, lang, cashier, me, signOut } = useSession();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['pos-catalog'], queryFn: () => api.posCatalog(session) });
@@ -59,16 +59,28 @@ export default function Pos() {
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
       <Row style={[st.top, { paddingTop: insets.top + 6 }]}>
-        <Touch onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={st.iconBtn} accessibilityLabel={t('posExit')}>
-          <Icon name="close" size={22} />
+        {cashier ? (
+          // A cashier's app is the till: signing out is the only way off it.
+          <Touch onPress={() => confirmStep({ label: t('signOut'), confirm: t('signOut') + '?', tone: 'danger' }, t('notNow'), () => { qc.clear(); signOut(); })} style={st.iconBtn} accessibilityLabel={t('signOut')}>
+            <Icon name="logout" size={22} />
+          </Touch>
+        ) : (
+          <Touch onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={st.iconBtn} accessibilityLabel={t('posExit')}>
+            <Icon name="close" size={22} />
+          </Touch>
+        )}
+        <View style={{ flex: 1 }}>
+          <Txt size={19} weight="bold">{t('pos')}</Txt>
+          {cashier && me?.name ? <Muted size={12} lines={1}>{t('posSignedIn', { n: me.name })}</Muted> : null}
+        </View>
+        <Touch onPress={() => router.push('/pos-today' as never)} style={st.pill}>
+          <Txt size={13} weight="semibold">{cashier ? t('myToday') : t('posToday')}</Txt>
         </Touch>
-        <Txt size={19} weight="bold" style={{ flex: 1 }}>{t('pos')}</Txt>
-        <Touch onPress={() => router.push('/pos-today')} style={st.pill}>
-          <Txt size={13} weight="semibold">{t('posToday')}</Txt>
-        </Touch>
-        <Touch onPress={() => router.push('/pos-books')} style={st.pill}>
-          <Txt size={13} weight="semibold">{t('booksShort')}</Txt>
-        </Touch>
+        {!cashier && (
+          <Touch onPress={() => router.push('/pos-books' as never)} style={st.pill}>
+            <Txt size={13} weight="semibold">{t('booksShort')}</Txt>
+          </Touch>
+        )}
       </Row>
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
         <Row style={st.search}>
@@ -135,9 +147,11 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   setQty: (p: PosProduct, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
-  const { t, lang } = useSession();
+  const { t, lang, cashier } = useSession();
   const insets = useSafeAreaInsets();
   const [ref, setRef] = useState(newRef);
+  // A cashier's discount goes through with the owner PIN, checked by the store (API 1.15).
+  const [pin, setPin] = useState('');
   const [method, setMethod] = useState<PosMethod>('cash');
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
@@ -156,18 +170,20 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   const cash = given.trim() ? parse(given) : null;
   const change = method === 'cash' && cash !== null ? r3(cash - total) : null;
   const short = change !== null && change < 0;
+  const needPin = cashier && discount > 0;
 
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty })), method, discount: dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
+      ...(needPin ? { owner_pin: pin.trim() } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
-    onError: (e) => { tick('warn'); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
+    onError: (e) => { tick('warn'); if (needPin) setPin(''); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
   });
 
   const reset = () => {
-    setRef(newRef()); setMethod('cash'); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setDone(null); sale.reset();
+    setRef(newRef()); setMethod('cash'); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -223,6 +239,13 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
                 <TextInput value={disc} onChangeText={setDisc} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={color.faint} style={[input, { flex: 1, minWidth: 0 }]} />
                 <Segmented<'amount' | 'percent'> items={[['amount', lang === 'ar' ? 'د.ب' : 'BHD'], ['percent', '%']]} value={discType} onChange={setDiscType} style={{ width: 140 }} />
               </Row>
+              {needPin && (
+                <View style={{ gap: 6 }}>
+                  <Muted size={12}>{t('ownerPinForDiscount')}</Muted>
+                  <TextInput value={pin} onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry maxLength={6}
+                    placeholder={t('ownerPinEnter')} placeholderTextColor={color.faint} style={[input, { textAlign: 'center', letterSpacing: 6 }]} />
+                </View>
+              )}
 
               <Txt size={14} weight="semibold">{t('posMethod')}</Txt>
               <Segmented<PosMethod> items={(methods.length ? methods : [{ key: 'cash' as PosMethod, label: t('posCash') }]).map((m) => [m.key, m.label])} value={method} onChange={setMethod} />
@@ -258,7 +281,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || sale.isPending} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || sale.isPending || (needPin && pin.trim().length < 4)} onPress={() => sale.mutate()} />
             </View>
           </>
         )}

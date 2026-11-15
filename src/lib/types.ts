@@ -23,6 +23,8 @@ export type Me = {
   currency: 'BHD';
   site: string;
   whatsapp_automation: boolean;
+  // API 1.15: a cashier sees the till only. Older stores send nothing: everyone is the owner there.
+  role?: 'owner' | 'cashier';
 };
 
 export type OrderSummary = {
@@ -249,6 +251,8 @@ export type PosSaleInput = {
   expected_total: number;
   name: string;
   phone: string;
+  // A cashier's discount needs the owner PIN (API 1.15).
+  owner_pin?: string;
 };
 export type PosReceipt = {
   id: number;
@@ -269,10 +273,21 @@ export type PosReceipt = {
 };
 export type PosToday = {
   count: number;
-  total: number;
-  by_method: Record<PosMethod, number>;
-  sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean }[];
+  // null for a cashier (API 1.15): they see their own sales, never the shop's totals.
+  total: number | null;
+  by_method: Record<PosMethod, number> | null;
+  own?: boolean;
+  sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean; staff?: string | null }[];
 };
+
+// Till staff (API 1.15): cashier accounts the owner makes, and who sold what.
+export type PosStaff = { id: number; name: string; login: string; active: boolean; last_sale: string | null };
+export type PosStaffList = { pin_set: boolean; staff: PosStaff[] };
+// Returned once when an account is made, switched on again or given a new password.
+export type PosStaffSecret = { staff: PosStaff; login?: string; password?: string };
+export type PosStaffRow = { id: number; name: string; login?: string; free?: number; free_count?: number; count: number; total: number; by_method: Record<PosMethod, number>; discounts: number; discount_count: number; voids: number; void_total: number; refunds: number };
+export type PosStaffEvent = { id: number; number: string; date: string | null; staff: string; login?: string; total: number; kind: 'void' | 'discount' | 'free'; amount?: number; by?: string | null; approved: string };
+export type PosStaffReport = { period: { preset: ShopPeriod; start: string; end: string; label: string }; staff: PosStaffRow[]; events: PosStaffEvent[] };
 
 // Shop books (API 1.7): the till's own sales, expenses and result, never mixed with the online store.
 export type ShopExpenseCat = 'stock' | 'rent' | 'salary' | 'bills' | 'other';
