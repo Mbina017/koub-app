@@ -13,10 +13,10 @@ import { SalesLine } from '../../components/Charts';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon, type IconName } from '../../components/Icon';
 
-// A staff account (API 1.16) has no Home: its app opens on the order list.
+// A staff account has no Home: its app opens on the work screen (API 1.17).
 export default function HomeTab() {
   const { cashier } = useSession();
-  return cashier ? <Redirect href={'/orders' as never} /> : <Home />;
+  return cashier ? <Redirect href={'/work' as never} /> : <Home />;
 }
 
 function Home() {
@@ -37,6 +37,10 @@ function Home() {
         <Touch onPress={() => router.push('/pos')} style={st.till} accessibilityLabel={t('pos')}>
           <Icon name="cash" size={18} tint={color.bg} />
           <Txt size={14} weight="semibold" tint={color.bg}>{t('pos')}</Txt>
+        </Touch>
+        {/* The work screen: drinks to make and orders to move on (API 1.17). */}
+        <Touch onPress={() => router.push('/work' as never)} style={st.newOrder} accessibilityLabel={t('work')}>
+          <Icon name="check" size={20} />
         </Touch>
         {/* An order for a customer who can't order on the website. */}
         <Touch onPress={() => router.push('/order-new')} style={st.newOrder} accessibilityLabel={t('newOrder')}>

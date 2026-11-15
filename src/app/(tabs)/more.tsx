@@ -50,6 +50,15 @@ export default function More() {
       <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
 
       {/* Alerts go to the owner's phones only (the store sends them to owners). */}
+      {cashier ? (
+        <>
+          <SectionTitle title={t('alerts')} icon="bell" />
+          <Card padded={false}>
+            <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last />
+          </Card>
+          {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+        </>
+      ) : null}
       {!cashier && <>
       <SectionTitle title={t('alerts')} icon="bell" />
       <Card padded={false}>

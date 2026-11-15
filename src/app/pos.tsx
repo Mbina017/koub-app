@@ -138,7 +138,7 @@ export default function Pos() {
         onClose={() => setOpen(false)}
         onDone={() => {
           setCart({});
-          for (const k of ['pos-catalog', 'pos-today', 'pos-books', 'home', 'products', 'numbers', 'orders']) qc.invalidateQueries({ queryKey: [k] });
+          for (const k of ['pos-catalog', 'pos-today', 'pos-books', 'home', 'products', 'numbers', 'orders', 'bar']) qc.invalidateQueries({ queryKey: [k] });
         }}
       />
     </View>
@@ -249,6 +249,10 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
 
+              {/* Drinks go to the barista screen under this name (API 1.17). */}
+              {!who && lines.some((l) => l.p.group === 'drinks') && (
+                <TextInput value={name} onChangeText={setName} placeholder={t('cupName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+              )}
               {loyaltyOn && (card ? (
                 <View style={[st.card, { gap: 8 }]}>
                   <Row style={{ justifyContent: 'space-between' }}>

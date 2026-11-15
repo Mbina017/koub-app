@@ -9,15 +9,17 @@ import { color, shadow } from '../../lib/theme';
 import { Icon, type IconName } from '../../components/Icon';
 import { Txt, tap } from '../../components/ui';
 
-const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products' | 'numbers' | 'more' }[] = [
+const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products' | 'numbers' | 'more' | 'work' }[] = [
   { name: 'index', icon: 'home', label: 'home' },
+  { name: 'work', icon: 'check', label: 'work' },
   { name: 'orders', icon: 'orders', label: 'orders' },
   { name: 'products', icon: 'products', label: 'products' },
   { name: 'numbers', icon: 'numbers', label: 'numbers' },
   { name: 'more', icon: 'more', label: 'more' },
 ];
 
-const STAFF_TABS = ['orders', 'more'];
+// Staff: the work screen, orders and more. The owner keeps the five tabs and opens Work from Home.
+const STAFF_TABS = ['work', 'orders', 'more'];
 
 // The five-tab bar from the dashboard, with the "to prepare" badge on Orders.
 function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
@@ -34,7 +36,7 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
       {state.routes.map((route, i) => {
         const tab = TABS.find((x) => x.name === route.name);
         // Staff (API 1.16): orders and more; the till opens from both.
-        if (!tab || (cashier && !STAFF_TABS.includes(tab.name))) return null;
+        if (!tab || (cashier ? !STAFF_TABS.includes(tab.name) : tab.name === 'work')) return null;
         const on = state.index === i;
         return (
           <Pressable
