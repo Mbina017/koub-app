@@ -53,7 +53,7 @@ function useAlerts(signedIn: boolean) {
 }
 
 function Gate() {
-  const { ready, session, lang, lock } = useSession();
+  const { ready, session, lang, lock, cashier } = useSession();
   const [unlocked, setUnlocked] = useState(false);
   useAlerts(!!session && (!lock || unlocked));
   useEffect(() => { if (ready) SplashScreen.hideAsync().catch(() => {}); }, [ready]);
@@ -67,14 +67,17 @@ function Gate() {
   return (
     <View style={{ flex: 1, backgroundColor: color.bg, direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: 'slide_from_right' }}>
+        {/* A cashier (API 1.15) gets the till and their own sales only; a link to any other screen goes nowhere. */}
         <Stack.Protected guard={!!session}>
+          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="pos-today" />
+        </Stack.Protected>
+        <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="order/[id]" />
           <Stack.Screen name="preorders" />
           <Stack.Screen name="run" />
           <Stack.Screen name="unpaid" />
-          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="pos-today" />
           <Stack.Screen name="pos-books" />
           <Stack.Screen name="staff" />
           <Stack.Screen name="staff-report" />

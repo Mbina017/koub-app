@@ -65,16 +65,17 @@ function Person({ p }: { p: PosStaffRow }) {
       <Row style={{ justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
           <Txt size={16} weight="semibold">{p.name}</Txt>
-          <Muted size={12}>{t('rpSales', { n: p.count })}</Muted>
+          <Muted size={12}>{[t('rpSales', { n: p.count }), p.login].filter(Boolean).join(' · ')}</Muted>
         </View>
         <Txt size={20} weight="bold">{money(p.total, lang)}</Txt>
       </Row>
       {(['cash', 'card', 'benefit'] as PosMethod[]).map((m) => (
         <Row key={m} style={{ justifyContent: 'space-between' }}><Muted>{label[m]}</Muted><Txt size={14}>{money(p.by_method[m] ?? 0, lang)}</Txt></Row>
       ))}
-      {(p.discount_count > 0 || p.voids > 0 || p.refunds > 0) && (
+      {(p.discount_count > 0 || p.voids > 0 || p.refunds > 0 || (p.free_count ?? 0) > 0) && (
         <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 2 }}>
           {p.discount_count > 0 && <TagChip label={t('rpDiscounts') + ' ' + p.discount_count + ' · ' + money(p.discounts, lang)} tone="amber" small />}
+          {(p.free_count ?? 0) > 0 && <TagChip label={t('rpFree') + ' ' + p.free_count + ' · ' + money(p.free ?? 0, lang)} tone="blue" small />}
           {p.voids > 0 && <TagChip label={t('rpVoids') + ' ' + p.voids + ' · ' + money(p.void_total, lang)} tone="red" small />}
           {p.refunds > 0 && <TagChip label={t('rpRefunds') + ' ' + money(p.refunds, lang)} tone="muted" small />}
         </Row>
@@ -89,11 +90,11 @@ function Event({ e, first, when }: { e: PosStaffEvent; first: boolean; when: str
   return (
     <Row gap={10} style={[{ paddingVertical: 10 }, !first && st.sep]}>
       <View style={{ flex: 1, gap: 2 }}>
-        <Txt size={14} weight="semibold">{'#' + e.number + ' · ' + e.staff}</Txt>
+        <Txt size={14} weight="semibold">{'#' + e.number + ' · ' + e.staff + (e.login ? ' (' + e.login + ')' : '')}</Txt>
         <Muted size={12}>{[when, how].filter(Boolean).join(' · ')}</Muted>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
-        <TagChip label={e.kind === 'void' ? t('rpVoid') : t('rpDiscount')} tone={e.kind === 'void' ? 'red' : 'amber'} small />
+        <TagChip label={e.kind === 'void' ? t('rpVoid') : e.kind === 'free' ? t('rpFree') : t('rpDiscount')} tone={e.kind === 'void' ? 'red' : e.kind === 'free' ? 'blue' : 'amber'} small />
         <Txt size={13} weight="semibold">{money(e.kind === 'void' ? e.total : e.amount ?? 0, lang)}</Txt>
       </View>
     </Row>
