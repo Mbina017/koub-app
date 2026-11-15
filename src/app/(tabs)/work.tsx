@@ -110,7 +110,7 @@ function HandOver({ tickets }: { tickets: BarTicket[] }) {
 
 function Ticket({ x }: { x: BarTicket }) {
   const session = useApiSession();
-  const { t } = useSession();
+  const { t, lang } = useSession();
   const qc = useQueryClient();
   const move = useMutation({
     mutationFn: (state: BarTicket['state']) => api.barSet(session, x.id, state),
@@ -153,6 +153,7 @@ function Ticket({ x }: { x: BarTicket }) {
           : <Row key={i} gap={10}>{line}</Row>;
       })}
       {perItem && !done && x.lines.length > 1 && <Muted size={12}>{t('workItemsReady', { r: readyN, n: x.lines.length })}</Muted>}
+      {x.pickup ? <View style={[st.where, { backgroundColor: color.blueBg }]}><Txt size={15} weight="semibold">{t('workPickup', { t: new Date(x.pickup).toLocaleTimeString(lang === 'ar' ? 'ar-BH' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' }) })}</Txt></View> : null}
       {x.where ? <View style={st.where}><Txt size={15} weight="semibold">{x.where}</Txt></View> : null}
       {x.note ? <Muted>{x.note}</Muted> : null}
       <Muted size={12}>{'#' + x.number}</Muted>

@@ -269,6 +269,8 @@ export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready'
   // API 1.27: who is making it, and the customer's private page.
   started?: { by: string; mine: boolean; at: string | null } | null;
   track?: string | null;
+  // API 1.29: ordered ahead online, the pickup time the customer chose.
+  pickup?: string | null;
   // Today's order number (API 1.22): staff call the customer by it.
   no?: number | null;
   // API 1.23: where to hand it over (in the shop, or the car).
@@ -329,6 +331,8 @@ export type RefundState = 'done' | 'owed' | 'none';
 export type CancelReason = 'mistake' | 'changed' | 'unpaid' | 'other';
 export type PosCancelInput = { owner_pin?: string; reason: CancelReason; reason_note?: string; refund: RefundState; refund_ref?: string; made?: boolean };
 export type RefundOwed = { id: number; no: number | null; number: string; date: string | null; amount: number; method: PosMethod; pay_ref: string | null; name: string; whatsapp: string | null; training: boolean };
+// Order ahead (API 1.29), owner only: koubbh.com/order.
+export type AheadSettings = { on: boolean; from: string; to: string; cap: number; lead: number; slots: { t: number; label: string; free: number }[]; url: string };
 // Ingredient stock (API 1.28), owner only.
 export type StockUnit = 'g' | 'ml' | 'pc';
 export type Ingredient = { id: string; name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number; days_left: number | null; is_low: boolean };

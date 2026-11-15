@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, AheadSettings, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -135,6 +135,9 @@ export const api = {
   posVoid: (s: Session, id: number, c: PosCancelInput) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { ...c, lang: appLang }),
   // A refund still owed (API 1.26), given back later with its number; "none" needs the owner (or the PIN).
   posRefund: (s: Session, id: number, state: 'done' | 'none', ref = '', ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/refund', { state, ref, owner_pin: ownerPin, lang: appLang }),
+  // Order ahead (API 1.29), owner only.
+  posAhead: (s: Session) => get<AheadSettings>(s, '/pos/ahead'),
+  posAheadSet: (s: Session, x: { on: boolean; from: string; to: string; cap: number; lead: number }) => post<AheadSettings>(s, '/pos/ahead', { ...x, lang: appLang }),
   // Ingredient stock and insights (API 1.28), owner only.
   posStock: (s: Session) => get<StockView>(s, '/pos/stock'),
   posStockIng: (s: Session, x: { id?: string; name: string; unit: StockUnit; low: number; cost: number }) => post<StockView>(s, '/pos/stock/ingredient', { ...x, lang: appLang }),
