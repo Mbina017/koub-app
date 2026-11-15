@@ -56,9 +56,12 @@ export const useLastAlertTap: () => Notifications.NotificationResponse | null | 
   Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse;
 
 // Where a tapped alert opens, if it is one of ours: the new order, the unfinished payments list, pre-orders or products.
-export type AlertTarget = { pathname: '/order/[id]'; params: { id: string } } | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' };
+export type AlertTarget =
+  | { pathname: '/order/[id]'; params: { id: string } }
+  | { pathname: '/pos-close'; params: { date: string } }
+  | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' };
 export function targetFromNotification(r: Notifications.NotificationResponse | null | undefined): AlertTarget | null {
-  const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown } | undefined;
+  const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown; date?: unknown } | undefined;
   switch (data?.type) {
     case 'new_order': return Number.isInteger(data.order_id) ? { pathname: '/order/[id]', params: { id: String(data.order_id) } } : null;
     case 'unpaid': return { pathname: '/unpaid' };
@@ -66,6 +69,9 @@ export function targetFromNotification(r: Notifications.NotificationResponse | n
     case 'staff_request': return { pathname: '/team' };
     case 'preorder_ready': return { pathname: '/preorders' };
     case 'sold_out': return { pathname: '/products' };
+    // API 1.25 / 1.30: a close that does not match, and the owner's daily summary: open that day's close.
+    case 'pos_close':
+    case 'pos_summary': return typeof data.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.date) ? { pathname: '/pos-close', params: { date: data.date } } : null;
     default: return null;
   }
 }
