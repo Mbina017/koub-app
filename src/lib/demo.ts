@@ -243,6 +243,7 @@ function posCatalog(en: boolean): PosCatalog {
     ],
     methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
     loyalty: { stamps: 4, max_per_sale: 4 },
+    training: true,
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {

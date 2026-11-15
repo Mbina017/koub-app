@@ -247,7 +247,9 @@ export type PosShelf = 'coffee' | 'tea' | 'sweets' | 'goods';
 // shelf / temp (API 1.19): where the till shows it (coffee hot / cold, tea, sweets, goods).
 export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; shelf?: PosShelf; temp?: 'hot' | 'cold' | null; stamp?: boolean; sku: string; price: number; stock: number | null; image: string | null };
 // loyalty: the KOUB card rules (API 1.11+), null when cards are off.
-export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null };
+export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null;
+  // Training mode (API 1.20): sales are practice only, nothing is real.
+  training?: boolean };
 // A barista ticket (API 1.17): the menu items of one till sale.
 export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean }[] };
 export type BarList = { tickets: BarTicket[]; waiting: number };
