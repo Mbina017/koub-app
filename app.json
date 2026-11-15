@@ -64,7 +64,8 @@
     "scheme": "koub",
     "backgroundColor": "#F7F3EC",
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/staff"
     },
     "extra": {
       "eas": {

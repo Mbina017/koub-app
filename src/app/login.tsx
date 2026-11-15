@@ -11,7 +11,9 @@ import { Icon } from '../components/Icon';
 export default function Login() {
   const { t, lang, signIn, signInDemo, setLangPref } = useSession();
   const insets = useSafeAreaInsets();
-  const [site, setSite] = useState('koubbh.com');
+  // The web version is served by the store itself (koubbh.com/staff): that store is the default.
+  const here = Platform.OS === 'web' ? globalThis.location?.host ?? '' : '';
+  const [site, setSite] = useState(here && !here.startsWith('localhost') ? here : 'koubbh.com');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'in' | 'demo' | null>(null);

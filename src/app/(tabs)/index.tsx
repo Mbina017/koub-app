@@ -13,10 +13,10 @@ import { SalesLine } from '../../components/Charts';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon, type IconName } from '../../components/Icon';
 
-// A staff account has no Home: its app opens on the work screen (API 1.17).
+// A staff account has no Home: its app opens on the till; Work, Orders and More are a tap away.
 export default function HomeTab() {
   const { cashier } = useSession();
-  return cashier ? <Redirect href={'/work' as never} /> : <Home />;
+  return cashier ? <Redirect href={'/pos' as never} /> : <Home />;
 }
 
 function Home() {
