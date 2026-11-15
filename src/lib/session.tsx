@@ -15,17 +15,12 @@ const PUSH = 'koub.push.v1';
 export type { PushPrefs };
 export type LangPref = 'auto' | Lang;
 
-// Web is only used for previews and has no secure storage, so a real sign-in there lives in memory
-// and is gone on reload. Only non-secret values (language, lock switch, the demo session) use sessionStorage.
-const memory = new Map<string, string>();
-const webSecret = (k: string, v: string) => k === KEY && !('demo' in (JSON.parse(v) as { session: Session }).session);
+// The web version (staff in a browser, API 1.16+) has no secure storage. A sign-in there is kept in sessionStorage:
+// it survives a page refresh but ends when the tab or browser is closed, so a shared computer does not stay signed in.
 const store = {
-  get: async (k: string) => (Platform.OS !== 'web' ? SecureStore.getItemAsync(k) : memory.get(k) ?? globalThis.sessionStorage?.getItem(k) ?? null),
-  set: async (k: string, v: string) => {
-    if (Platform.OS !== 'web') return SecureStore.setItemAsync(k, v);
-    if (webSecret(k, v)) { memory.set(k, v); globalThis.sessionStorage?.removeItem(k); } else globalThis.sessionStorage?.setItem(k, v);
-  },
-  del: async (k: string) => { if (Platform.OS !== 'web') return SecureStore.deleteItemAsync(k); memory.delete(k); globalThis.sessionStorage?.removeItem(k); },
+  get: async (k: string) => (Platform.OS !== 'web' ? SecureStore.getItemAsync(k) : globalThis.sessionStorage?.getItem(k) ?? null),
+  set: async (k: string, v: string) => { if (Platform.OS !== 'web') return SecureStore.setItemAsync(k, v); globalThis.sessionStorage?.setItem(k, v); },
+  del: async (k: string) => { if (Platform.OS !== 'web') return SecureStore.deleteItemAsync(k); globalThis.sessionStorage?.removeItem(k); },
 };
 
 type Ctx = {
