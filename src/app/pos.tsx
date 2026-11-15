@@ -2,7 +2,7 @@
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -40,6 +40,9 @@ export default function Pos() {
   const [group, setGroup] = useState<'all' | 'drinks' | 'products'>('all');
   const [cart, setCart] = useState<Record<number, number>>({});
   const [open, setOpen] = useState(false);
+  // More tiles across on a tablet.
+  const { width } = useWindowDimensions();
+  const cols = width >= 1100 ? 5 : width >= 768 ? 4 : 2;
 
   const products = q.data?.products ?? [];
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -99,7 +102,8 @@ export default function Pos() {
       ) : (
         <FlatList
           data={shown}
-          numColumns={2}
+          key={'cols-' + cols}
+          numColumns={cols}
           keyExtractor={(p) => String(p.id)}
           columnWrapperStyle={{ gap: space.md }}
           contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + (count ? 110 : space.xl) }}

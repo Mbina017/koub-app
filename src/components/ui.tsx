@@ -170,7 +170,7 @@ export function Screen({ title, right, children, refreshing, onRefresh, header, 
   const insets = useSafeAreaInsets();
   const { session, t } = useSession();
   const head = (
-    <View style={{ paddingTop: insets.top + space.sm }}>
+    <View style={{ paddingTop: insets.top + space.sm, width: '100%', maxWidth: 1040, alignSelf: 'center' }}>
       {session && 'demo' in session && <View style={s.demo}><Txt size={11} weight="semibold" tint={color.amber} center>{t('demoBanner')}</Txt></View>}
       {title && <Row style={{ justifyContent: 'space-between', paddingHorizontal: space.lg, paddingBottom: space.sm }}><Txt size={30} weight="bold" style={{ letterSpacing: -0.5 }}>{title}</Txt>{right}</Row>}
       {header}
@@ -180,7 +180,8 @@ export function Screen({ title, right, children, refreshing, onRefresh, header, 
   return (
     <ScrollView style={s.screen} contentContainerStyle={{ paddingBottom: insets.bottom + 110 }} refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={color.ink} /> : undefined} keyboardShouldPersistTaps="handled">
       {head}
-      <View style={{ paddingHorizontal: space.lg }}>{children}</View>
+      {/* On a tablet the content stays a readable width, centred. */}
+      <View style={{ paddingHorizontal: space.lg, width: '100%', maxWidth: 1040, alignSelf: 'center' }}>{children}</View>
     </ScrollView>
   );
 }

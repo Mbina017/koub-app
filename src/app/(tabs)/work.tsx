@@ -2,8 +2,10 @@
 // - Drinks: barista tickets from the till (waiting → ready → handed over), oldest first, with how long each waited.
 // - To prepare: online and staff orders waiting for their next step, done from the card.
 // Refreshes on its own, so it can stay open on the counter.
-import { useState } from 'react';
-import { Linking, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Linking, Modal, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import { SwipeCard } from '../../components/SwipeCard';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
@@ -26,19 +28,65 @@ export default function Work() {
   const old = bar.error instanceof ApiError && bar.error.message === 'no_route';
   const waiting = bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
   const toPrep = prep.data?.orders.length ?? 0;
+  // A tablet (or a wide window) shows both lanes side by side.
+  const wide = useWindowDimensions().width >= 768;
+
+  const barLane = old ? <View style={st.card}><Muted>{t('needsUpdate')}</Muted></View>
+    : !bar.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
+    : bar.data.tickets.length === 0 ? <Empty title={t('workBarEmpty')} icon="cash" />
+    : bar.data.tickets.map((x) => <Ticket key={x.id} x={x} />);
+  const prepLane = !prep.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
+    : prep.data.orders.length === 0 ? <Empty title={t('allClear')} icon="check" />
+    : prep.data.orders.map((o) => <OrderCard key={o.id} o={o} label={prep.data!.bulk?.find((b) => b.key === o.next)?.label} />);
 
   return (
     <Screen title={t('work')} refreshing={bar.isRefetching || prep.isRefetching} onRefresh={() => { bar.refetch(); prep.refetch(); }}>
-      <Segmented<'bar' | 'prepare'> items={[['bar', t('workBar') + (waiting ? ' · ' + waiting : '')], ['prepare', t('workPrepare') + (toPrep ? ' · ' + toPrep : '')]]} value={lane} onChange={setLane} style={{ marginBottom: space.md }} />
-      {lane === 'bar' ? (
-        old ? <View style={st.card}><Muted>{t('needsUpdate')}</Muted></View>
-          : !bar.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
-          : bar.data.tickets.length === 0 ? <Empty title={t('workBarEmpty')} icon="cash" />
-          : bar.data.tickets.map((x) => <Ticket key={x.id} x={x} />)
-      ) : !prep.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
-        : prep.data.orders.length === 0 ? <Empty title={t('allClear')} icon="check" />
-        : prep.data.orders.map((o) => <OrderCard key={o.id} o={o} label={prep.data!.bulk?.find((b) => b.key === o.next)?.label} />)}
+      {wide ? (
+        <Row align="flex-start" gap={space.lg}>
+          <View style={{ flex: 1 }}><Txt size={17} weight="bold" style={{ marginBottom: space.sm }}>{t('workBar') + (waiting ? ' · ' + waiting : '')}</Txt>{barLane}</View>
+          <View style={{ flex: 1 }}><Txt size={17} weight="bold" style={{ marginBottom: space.sm }}>{t('workPrepare') + (toPrep ? ' · ' + toPrep : '')}</Txt>{prepLane}</View>
+        </Row>
+      ) : (
+        <>
+          <Segmented<'bar' | 'prepare'> items={[['bar', t('workBar') + (waiting ? ' · ' + waiting : '')], ['prepare', t('workPrepare') + (toPrep ? ' · ' + toPrep : '')]]} value={lane} onChange={setLane} style={{ marginBottom: space.md }} />
+          {lane === 'bar' ? barLane : prepLane}
+        </>
+      )}
+      <Tips />
     </Screen>
+  );
+}
+
+// First visit on this phone: three short tips, then never again.
+const TIPS = 'koub.tips.work.v1';
+function Tips() {
+  const { t } = useSession();
+  const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    (async () => {
+      try { const seen = Platform.OS === 'web' ? globalThis.localStorage?.getItem(TIPS) : await SecureStore.getItemAsync(TIPS); if (!seen) setOpen(true); } catch { /* skip */ }
+    })();
+  }, []);
+  const close = () => {
+    setOpen(false);
+    try { if (Platform.OS === 'web') globalThis.localStorage?.setItem(TIPS, '1'); else SecureStore.setItemAsync(TIPS, '1').catch(() => {}); } catch { /* skip */ }
+  };
+  const tips: [string, string][] = [[t('tip1Title'), t('tip1Body')], [t('tip2Title'), t('tip2Body')], [t('tip3Title'), t('tip3Body')]];
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+      <View style={st.shade}>
+        <View style={[st.card, { gap: space.md, padding: space.lg, maxWidth: 440, width: '100%', alignSelf: 'center' }]}>
+          <Muted size={12}>{(page + 1) + ' / ' + tips.length}</Muted>
+          <Txt size={20} weight="bold">{tips[page][0]}</Txt>
+          <Txt size={15}>{tips[page][1]}</Txt>
+          <Row gap={8}>
+            <Button label={page < tips.length - 1 ? t('nextStep') : t('done')} onPress={() => (page < tips.length - 1 ? setPage(page + 1) : close())} style={{ flex: 1 }} />
+            {page < tips.length - 1 && <Button label={t('skip')} kind="ghost" onPress={close} />}
+          </Row>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -54,8 +102,10 @@ function Ticket({ x }: { x: BarTicket }) {
   const waited = minutes(x.since);
   const late = x.state === 'waiting' && waited >= 10 ? color.red : x.state === 'waiting' && waited >= 5 ? color.amber : color.muted;
   const done = x.state === 'done';
+  const next = x.state === 'waiting' ? 'ready' : x.state === 'ready' ? 'done' : null;
   return (
-    <View style={[st.card, { gap: 10, marginBottom: space.md }, x.state === 'ready' && st.ready, done && { opacity: 0.5 }]}>
+    <SwipeCard label={next === 'ready' ? t('workReady') : next === 'done' ? t('workHanded') : undefined} onSwipe={next ? () => move.mutate(next) : undefined} disabled={move.isPending} style={{ marginBottom: space.md }}>
+    <View style={[st.card, { gap: 10 }, x.state === 'ready' && st.ready, done && { opacity: 0.5 }]}>
       <Row style={{ justifyContent: 'space-between' }}>
         <Txt size={20} weight="bold" style={{ flex: 1 }} lines={1}>{x.name || '#' + x.number}</Txt>
         <Txt size={14} weight="semibold" tint={late}>{t('workMin', { n: waited })}</Txt>
@@ -78,6 +128,7 @@ function Ticket({ x }: { x: BarTicket }) {
       )}
       {done && <Touch onPress={() => move.mutate('ready')} style={{ alignSelf: 'flex-start' }}><Muted>{t('workUndo')}</Muted></Touch>}
     </View>
+    </SwipeCard>
   );
 }
 
@@ -91,7 +142,8 @@ function OrderCard({ o, label }: { o: OrderSummary; label?: string }) {
     onError: (e) => showMessage(t('notUpdated'), e.message),
   });
   return (
-    <View style={[st.card, { gap: 8, marginBottom: space.md }]}>
+    <SwipeCard label={o.next ? label : undefined} onSwipe={o.next && label ? () => step.mutate() : undefined} disabled={step.isPending} style={{ marginBottom: space.md }}>
+    <View style={[st.card, { gap: 8 }]}>
       <Touch onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(o.id) } })} style={{ gap: 6 }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <Txt size={17} weight="bold">{'#' + o.number + ' · ' + o.name}</Txt>
@@ -108,6 +160,7 @@ function OrderCard({ o, label }: { o: OrderSummary; label?: string }) {
           onPress={() => confirmStep({ label, confirm: t('workStepQ', { n: o.number, s: label }), tone: 'primary' }, t('notNow'), () => step.mutate())} />
       ) : null}
     </View>
+    </SwipeCard>
   );
 }
 
@@ -115,5 +168,6 @@ const st = StyleSheet.create({
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   ready: { borderWidth: 2, borderColor: color.green },
   qty: { minWidth: 34, height: 34, borderRadius: 10, backgroundColor: color.sunken, justifyContent: 'center', paddingHorizontal: 6 },
+  shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: space.lg },
   side: { width: 52, borderRadius: radius.md, backgroundColor: color.greenBg, alignItems: 'center', justifyContent: 'center' },
 });
