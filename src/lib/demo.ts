@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -233,13 +233,13 @@ function actions(o: DemoOrder): OrderAction[] {
 
 // ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
 const posSales: PosReceipt[] = [];
-const menuDrinks: [string, number][] = [['سبانش لاتيه', 2.2], ['آيس لاتيه', 2.1], ['أمريكانو', 1.5], ['كرك', 0.8]];
+const menuDrinks: [string, number, PosShelf, 'hot' | 'cold' | null][] = [['آيس سبانش العقيلي', 2.5, 'coffee', 'cold'], ['أمريكانو', 1.5, 'coffee', 'hot'], ['كورتادو', 1.6, 'coffee', 'hot'], ['فلات وايت / لاتيه / كابتشينو', 1.8, 'coffee', 'hot'], ['سبانش / فانيلا / كراميل لاتيه', 2.1, 'coffee', 'cold'], ['كولد برو', 2.2, 'coffee', 'cold'], ['كرك', 0.8, 'tea', 'hot'], ['ماتشا', 2.2, 'tea', 'cold'], ['كيكة الرفاع', 1.8, 'sweets', null], ['تيراميسو', 2, 'sweets', null]];
 const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
 function posCatalog(en: boolean): PosCatalog {
   return {
     products: [
-      ...menuDrinks.map(([name, price], i) => ({ id: 700 + i, name, group: 'drinks' as const, sku: 'MENU-' + i, price, stock: null, image: null })),
-      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null })),
+      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
     loyalty: { stamps: 4, max_per_sale: 4 },

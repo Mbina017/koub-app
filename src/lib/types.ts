@@ -243,7 +243,9 @@ export type StaffOrder = {
 export type StaffQuote = { subtotal: number; delivery: number | null; total: number | null };
 // group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
 // stamp: a drink that earns a KOUB card stamp and can be the free drink (API 1.16; before that, every menu item).
-export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; stamp?: boolean; sku: string; price: number; stock: number | null; image: string | null };
+export type PosShelf = 'coffee' | 'tea' | 'sweets' | 'goods';
+// shelf / temp (API 1.19): where the till shows it (coffee hot / cold, tea, sweets, goods).
+export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; shelf?: PosShelf; temp?: 'hot' | 'cold' | null; stamp?: boolean; sku: string; price: number; stock: number | null; image: string | null };
 // loyalty: the KOUB card rules (API 1.11+), null when cards are off.
 export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null };
 // A barista ticket (API 1.17): the menu items of one till sale.
@@ -288,12 +290,13 @@ export type PosReceipt = {
   repeat?: boolean;
 };
 export type PosToday = {
-  count: number;
+  // null for a cashier (API 1.19): staff see their sales only to cancel one, never how much they sold.
+  count: number | null;
   // null for a cashier (API 1.15): they see their own sales, never the shop's totals.
   total: number | null;
   by_method: Record<PosMethod, number> | null;
   own?: boolean;
-  sales: { id: number; number: string; total: number; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean; staff?: string | null }[];
+  sales: { id: number; number: string; total: number | null; method: PosMethod; method_label: string; date: string | null; void: boolean; items: number; refunded?: number; voidable?: boolean; staff?: string | null }[];
 };
 
 // Till staff (API 1.15): cashier accounts the owner makes, and who sold what.
