@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -271,6 +271,12 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   posSales.unshift(sale);
   return sale;
 }
+// Barista tickets (API 1.17), demo only.
+const demoBar: BarTicket[] = [
+  { id: 5021, number: '5021', state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش لاتيه', qty: 2 }, { name: 'كيكة الرفاع', qty: 1 }] },
+  { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1 }] },
+  { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1 }] },
+];
 // Till staff (API 1.15), demo only.
 let demoPin = false;
 const demoStaff: PosStaff[] = [
@@ -354,6 +360,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; return x as T; }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
   if (path === '/pos/staff/add') {
     const s: PosStaff = { id: 900 + demoStaff.length, name: String(p.name ?? ''), login: 'till-' + (2000 + demoStaff.length), active: true, last_sale: null };
@@ -561,6 +568,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/bar') return { tickets: demoBar.filter((x) => x.state !== 'done'), waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
   if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1 } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
   if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
