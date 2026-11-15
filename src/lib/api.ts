@@ -124,6 +124,8 @@ export const api = {
   unpaidDismiss: (s: Session, id: number) => post<{ ok: boolean }>(s, '/orders/' + id + '/unpaid-dismiss', { lang: appLang }),
   // Shop till (API 1.5). A sale carries its own `ref`, so sending it again never sells twice.
   posCatalog: (s: Session) => get<PosCatalog>(s, '/pos/catalog'),
+  // Sold out today (API 1.23): staff mark an item; it comes back by itself tomorrow.
+  posOut: (s: Session, id: number, out: boolean) => post<{ out: number[] }>(s, '/pos/out', { id, out }),
   posSale: (s: Session, sale: PosSaleInput) => post<PosReceipt>(s, '/pos/sale', { ...sale, lang: appLang }),
   posToday: (s: Session) => get<PosToday>(s, '/pos/today'),
   // A cashier cancels with the owner PIN (API 1.15); the owner sends none.

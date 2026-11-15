@@ -124,12 +124,14 @@ function Ticket({ x }: { x: BarTicket }) {
     <SwipeCard label={done ? undefined : t('workHanded')} onSwipe={done ? undefined : () => move.mutate('done')} disabled={move.isPending} style={{ marginBottom: space.md }}>
     <View style={[st.card, { gap: 10 }, x.state === 'ready' && st.ready, done && { opacity: 0.5 }]}>
       <Row style={{ justifyContent: 'space-between' }}>
+        {x.no ? <View style={st.no}><Txt size={20} weight="bold" tint={color.bg} center>{String(x.no)}</Txt></View> : null}
         <Txt size={20} weight="bold" style={{ flex: 1 }} lines={1}>{x.name || '#' + x.number}</Txt>
         <Txt size={14} weight="semibold" tint={late}>{t('workMin', { n: waited })}</Txt>
       </Row>
       {x.lines.map((l, i) => (
-        <Row key={i} gap={10}><View style={st.qty}><Txt size={16} weight="bold" center>{l.qty}</Txt></View><Txt size={17} weight="medium" style={{ flex: 1 }}>{l.name}</Txt>{l.drink === false && <Icon name="products" size={16} tint={color.faint} />}</Row>
+        <Row key={i} gap={10}><View style={st.qty}><Txt size={16} weight="bold" center>{l.qty}</Txt></View><View style={{ flex: 1 }}><Txt size={17} weight="medium">{l.name}</Txt>{l.options ? <Txt size={14} weight="semibold" tint={color.amber}>{l.options}</Txt> : null}</View>{l.drink === false && <Icon name="products" size={16} tint={color.faint} />}</Row>
       ))}
+      {x.where ? <View style={st.where}><Txt size={15} weight="semibold">{x.where}</Txt></View> : null}
       {x.note ? <Muted>{x.note}</Muted> : null}
       <Muted size={12}>{'#' + x.number}</Muted>
       {!done && (
@@ -184,6 +186,8 @@ function OrderCard({ o, label }: { o: OrderSummary; label?: string }) {
 const st = StyleSheet.create({
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   ready: { borderWidth: 2, borderColor: color.green },
+  where: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: color.amberBg },
+  no: { minWidth: 40, height: 40, borderRadius: 12, paddingHorizontal: 8, backgroundColor: color.ink, justifyContent: 'center', marginEnd: 10 },
   qty: { minWidth: 34, height: 34, borderRadius: 10, backgroundColor: color.sunken, justifyContent: 'center', paddingHorizontal: 6 },
   shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: space.lg },
   side: { width: 52, borderRadius: radius.md, backgroundColor: color.greenBg, alignItems: 'center', justifyContent: 'center' },

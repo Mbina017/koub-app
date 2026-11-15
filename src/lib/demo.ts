@@ -234,25 +234,33 @@ function actions(o: DemoOrder): OrderAction[] {
 // ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
 const posSales: PosReceipt[] = [];
 const menuDrinks: [string, number, PosShelf, 'hot' | 'cold' | null][] = [['آيس سبانش العقيلي', 2.5, 'coffee', 'cold'], ['أمريكانو', 1.5, 'coffee', 'hot'], ['كورتادو', 1.6, 'coffee', 'hot'], ['فلات وايت / لاتيه / كابتشينو', 1.8, 'coffee', 'hot'], ['سبانش / فانيلا / كراميل لاتيه', 2.1, 'coffee', 'cold'], ['كولد برو', 2.2, 'coffee', 'cold'], ['كرك', 0.8, 'tea', 'hot'], ['ماتشا', 2.2, 'tea', 'cold'], ['كيكة الرفاع', 1.8, 'sweets', null], ['تيراميسو', 2, 'sweets', null]];
+// Combined menu items (API 1.22): one is picked at the POS.
+const demoChoices: Record<number, { key: string; label: string }[]> = {
+  3: [{ key: 'flat-white', label: 'فلات وايت' }, { key: 'latte', label: 'لاتيه' }, { key: 'cappuccino', label: 'كابتشينو' }],
+  4: [{ key: 'spanish', label: 'سبانش' }, { key: 'vanilla', label: 'فانيلا' }, { key: 'caramel', label: 'كراميل' }],
+};
+let demoNo = 0;
+let demoOut: number[] = [];
 const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
 function posCatalog(en: boolean): PosCatalog {
   return {
     products: [
-      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null })),
+      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null, choices: demoChoices[i] ?? [], out_today: demoOut.includes(700 + i) })),
       ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: (['card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
     loyalty: { stamps: 4, max_per_sale: 4 },
     training: true,
     benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
+    top: [700, 703, 704, 701, 706, 708],
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   // Same reference and same basket: the same sale (as the store does).
-  const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => l.id + 'x' + l.qty).sort().join(',');
+  const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number; choice?: string; note?: string }[]) ?? []).map((l) => l.id + (l.choice ?? '') + (l.note ?? '') + 'x' + l.qty).sort().join(',');
   const done = posSales.find((s) => (s as PosReceipt & { ref?: string }).ref === ref);
   if (done) return { ...done, repeat: true };
-  const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: (l.id >= 700 ? [menuDrinks[l.id - 700][0], menuDrinks[l.id - 700][1], null, null] : catalog[l.id - 100]) as (typeof catalog)[number], ...l }));
+  const lines = ((p.lines as { id: number; qty: number; choice?: string; note?: string }[]) ?? []).map((l) => ({ row: (l.id >= 700 ? [menuDrinks[l.id - 700][0], menuDrinks[l.id - 700][1], null, null] : catalog[l.id - 100]) as (typeof catalog)[number], ...l }));
   if (!lines.length) throw new Error(en ? 'The sale is empty.' : 'البيع فاضي.');
   for (const l of lines) if (l.row && l.row[3] !== null && l.row[3] < l.qty) throw new Error(en ? l.row[0] + ': the store shows ' + l.row[3] + ' in stock. Fix the stock count first.' : l.row[0] + ': المخزون في النظام ' + l.row[3] + '. عدّل المخزون أول.');
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -267,7 +275,8 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   const phone = String(p.phone ?? '').replace(/\D+/g, '');
   const sale: PosReceipt & { ref: string } = {
     ref, id: 900 + posSales.length, number: String(2400 + posSales.length), status: 'completed', date: new Date().toISOString(),
-    lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty) })), discount, total, method, method_label: methodLabel(method, en),
+    no: ++demoNo,
+    lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty), options: [demoChoices[l.id - 700]?.find((c) => c.key === l.choice)?.label, l.note].filter(Boolean).join(' · ') })), discount, total, method, method_label: methodLabel(method, en),
     cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
   };
   posSales.unshift(sale);
@@ -275,7 +284,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
 }
 // Barista tickets (API 1.17), demo only.
 const demoBar: BarTicket[] = [
-  { id: 5021, number: '5021', state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش لاتيه', qty: 2, drink: true }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
+  { id: 5021, number: '5021', no: 7, where: '🚗 لاندكروزر بيضاء', state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش / فانيلا / كراميل لاتيه', qty: 2, drink: true, options: 'فانيلا · ثلج خفيف' }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
   { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
   { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
@@ -362,6 +371,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
   if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); return x as T; }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
   if (path === '/pos/staff/add') {
