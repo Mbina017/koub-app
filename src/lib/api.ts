@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -137,6 +137,8 @@ export const api = {
   posStaffApprove: (s: Session, id: number, approve: boolean) => post<PosStaffSecret | { removed: true }>(s, '/pos/staff/' + id + '/approve', { approve, lang: appLang }),
   // A KOUB card by the code in its QR ("KOUB" + 8 characters) or typed from the card.
   loyaltyCard: (s: Session, code: string) => get<LoyaltyCard>(s, '/loyalty/card', { code }),
+  // A returning customer by number (API 1.18).
+  customer: (s: Session, phone: string, country: string) => get<CustomerLookup>(s, '/customer', { phone, country }),
   // The barista queue (API 1.17).
   bar: (s: Session) => get<BarList>(s, '/bar'),
   barSet: (s: Session, id: number, state: BarTicket['state']) => post<BarTicket>(s, '/bar/' + id, { state, lang: appLang }),

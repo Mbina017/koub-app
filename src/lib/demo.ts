@@ -382,8 +382,9 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
     if (path === '/orders/quote') return { subtotal: sub, delivery, total: sub + delivery } as T;
     if (!String(p.name ?? '').trim()) throw new Error(en ? 'Enter the customer’s name.' : 'اكتب اسم الزبون.');
     const pickup = p.fulfilment === 'pickup';
+    const saved = !pickup && Number(p.address_from ?? 0) > 0;
     return { id: 990, number: '990', total: sub + delivery, method_label: String(p.method), name: String(p.name), whatsapp: String(p.phone).replace(/\D/g, ''), pickup,
-      address_state: pickup ? '' : 'awaiting_address', message_state: pickup ? '' : 'sent', link: pickup ? null : 'https://koubbh.com/address/#' + 'a'.repeat(64), lang: String(p.message_lang ?? 'ar') } as T;
+      address_state: pickup ? '' : saved ? 'received' : 'awaiting_address', message_state: pickup || saved ? '' : 'sent', link: pickup || saved ? null : 'https://koubbh.com/address/#' + 'a'.repeat(64), lang: String(p.message_lang ?? 'ar') } as T;
   }
   if (/^\/orders\/\d+\/address-link$/.test(path)) return { id: 990, number: '990', total: 0, method_label: '', name: '', whatsapp: '', pickup: false, address_state: 'awaiting_address', message_state: 'sent', link: 'https://koubbh.com/address/#' + 'b'.repeat(64), lang: 'ar' } as T;
   if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en') as T;
@@ -568,6 +569,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar') return { tickets: demoBar.filter((x) => x.state !== 'done'), waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
   if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1 } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
