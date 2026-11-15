@@ -1,9 +1,10 @@
 // Ingredient stock (API 1.28), owner only. Two tabs:
 // - Ingredients: what is left, days it lasts at last week's pace, low ones first; a delivery adds, a count sets the
 //   real figure, waste takes out; add or change an ingredient (unit, low mark, cost per unit).
+// - Shopping list (on Ingredients): what to buy for 3, 7 or 14 days, with its rough cost, to share.
 // - Recipes: what one cup of each drink uses (per drink choice when it differs), its cost and what it earns.
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +14,7 @@ import { color, font, radius, space } from '../lib/theme';
 import { money } from '../lib/format';
 import { showMessage } from '../lib/confirm';
 import type { Ingredient, RecipeItem, StockProduct, StockUnit, StockView } from '../lib/types';
+import { shoppingList } from '../lib/shopping';
 import { Button, ErrorState, Muted, Row, Segmented, Skeleton, TagChip, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 
@@ -42,6 +44,7 @@ export default function PosStock() {
           <Segmented<'ing' | 'recipes'> items={[['ing', t('stockIngredients')], ['recipes', t('stockRecipes')]]} value={tab} onChange={setTab} />
           {q.isError && !d ? <ErrorState onRetry={() => { q.refetch(); }} /> : !d ? [0, 1, 2].map((i) => <Skeleton key={i} h={90} r={radius.lg} />) : tab === 'ing' ? (
             <>
+              {d.ingredients.length > 0 && <ShoppingCard ings={d.ingredients} unit={unit} />}
               {d.ingredients.length === 0 && <Muted center>{t('stockEmpty')}</Muted>}
               {d.ingredients.map((x) => <IngredientCard key={x.id} x={x} unit={unit} onSaved={put} onError={fail} />)}
               <IngredientForm unit={unit} onSaved={put} onError={fail} />
@@ -53,6 +56,41 @@ export default function PosStock() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+// What to buy so the ingredients last the chosen days; shared as plain text (WhatsApp, Notes…).
+function ShoppingCard({ ings, unit }: { ings: Ingredient[]; unit: (u: StockUnit) => string }) {
+  const { t, lang } = useSession();
+  const [open, setOpen] = useState(false);
+  const [days, setDays] = useState<'3' | '7' | '14'>('7');
+  const rows = shoppingList(ings, Number(days));
+  const total = rows.reduce((a, r) => a + (r.cost ?? 0), 0);
+  const line = (r: (typeof rows)[number]) => r.name + ' — ' + fmt(r.buy) + ' ' + unit(r.unit);
+  const share = () => Share.share({ message: [t('shopMsg', { n: days }), ...rows.map((r) => '• ' + line(r)), total > 0 ? t('shopTotal', { x: money(total, lang) }) : ''].filter(Boolean).join('\n') }).catch(() => {});
+  return (
+    <View style={[st.card, { gap: 8 }]}>
+      <Touch onPress={() => setOpen((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+        <Txt size={15} weight="semibold" style={{ flex: 1 }}>{'🛒 ' + t('shopTitle')}</Txt>
+        {rows.length > 0 && <TagChip label={String(rows.length)} tone="amber" small />}
+        <Icon name="chevron" size={18} tint={color.faint} rtl={lang === 'ar'} />
+      </Touch>
+      {open && (
+        <>
+          <Segmented<'3' | '7' | '14'> items={(['3', '7', '14'] as const).map((k) => [k, t('shopDays', { n: k })])} value={days} onChange={setDays} />
+          <Muted size={12}>{t('shopHint', { n: days })}</Muted>
+          {rows.length === 0 ? <Txt size={14} tint={color.green}>{t('shopNone', { n: days })}</Txt> : rows.map((r) => (
+            <Row key={r.id} style={{ justifyContent: 'space-between' }} gap={8}>
+              <Txt size={14} style={{ flex: 1 }} lines={1}>{r.name}</Txt>
+              <Txt size={14} weight="semibold">{fmt(r.buy) + ' ' + unit(r.unit)}</Txt>
+              {r.cost !== null && <Muted size={12} style={{ width: 76, textAlign: 'right' }}>{money(r.cost, lang)}</Muted>}
+            </Row>
+          ))}
+          {total > 0 && <Muted size={12}>{t('shopTotal', { x: money(total, lang) })}</Muted>}
+          {rows.length > 0 && <Button label={t('shopShare')} icon="whatsapp" kind="light" onPress={share} />}
+        </>
+      )}
     </View>
   );
 }
