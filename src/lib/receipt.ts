@@ -15,16 +15,18 @@ export function receiptHtml(r: PosReceipt, lang: Lang) {
   const ar = lang === 'ar';
   const L = (en: string, a: string) => (ar ? a : en);
   const row = (a: string, b: string, strong = false) => `<tr${strong ? ' class="b"' : ''}><td>${a}</td><td class="n">${b}</td></tr>`;
-  const lines = r.lines.map((l) => row(esc(l.name) + ` <span class="q">× ${l.qty}</span>`, money(l.total, lang))).join('');
+  const lines = r.lines.map((l) => row(esc(l.name) + ` <span class="q">× ${l.qty}</span>` + (l.options ? `<br><span class="q">${esc(l.options)}</span>` : ''), money(l.total, lang))).join('');
   return `<!doctype html><html dir="${ar ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>
   @page{size:80mm auto;margin:4mm}body{font-family:-apple-system,"Segoe UI",Tahoma,sans-serif;color:#2B241D;font-size:11px;margin:0}
   h1{font-family:Georgia,serif;letter-spacing:4px;font-weight:600;font-size:22px;text-align:center;margin:4px 0 0}
   .tag{text-align:center;font-size:8px;letter-spacing:3px;color:#6B6157;margin-bottom:8px}
   .meta{text-align:center;color:#6B6157;margin-bottom:8px}table{width:100%;border-collapse:collapse}td{padding:3px 0;vertical-align:top}
   .n{text-align:${ar ? 'left' : 'right'};white-space:nowrap;direction:ltr}.q{color:#6B6157}.b td{font-weight:700;font-size:13px;border-top:1px dashed #9A8F83;padding-top:6px}
+  .no{text-align:center;font-size:14px;margin-bottom:4px}.no b{font-size:28px}
   .sep{border-top:1px dashed #9A8F83;margin:6px 0}.thanks{text-align:center;margin-top:10px;color:#6B6157}
   </style></head><body>
   <h1>KOUB</h1><div class="tag">CARRY YOUR STORY</div>
+  ${r.no ? `<div class="no">${L('Order', 'طلب رقم')} <b>${r.no}</b></div>` : ''}
   <div class="meta">${L('Receipt', 'إيصال')} #${esc(r.number)}<br>${esc(when(r.date, lang))}</div>
   <table>${lines}
   ${r.discount > 0 ? row(L('Discount', 'خصم'), '−' + money(r.discount, lang)) : ''}
@@ -39,9 +41,9 @@ export function receiptHtml(r: PosReceipt, lang: Lang) {
 
 export function receiptText(r: PosReceipt, lang: Lang) {
   const ar = lang === 'ar';
-  const items = r.lines.map((l) => `${l.name} × ${l.qty} — ${money(l.total, lang)}`).join('\n');
+  const items = r.lines.map((l) => `${l.name}${l.options ? ' (' + l.options + ')' : ''} × ${l.qty} — ${money(l.total, lang)}`).join('\n');
   return [
-    ar ? `شكراً لتسوقك من KOUB 🤍\nإيصال #${r.number}` : `Thank you for shopping at KOUB 🤍\nReceipt #${r.number}`,
+    ar ? `شكراً لتسوقك من KOUB 🤍\n${r.no ? 'طلب رقم ' + r.no + ' · ' : ''}إيصال #${r.number}` : `Thank you for shopping at KOUB 🤍\n${r.no ? 'Order ' + r.no + ' · ' : ''}Receipt #${r.number}`,
     items,
     r.discount > 0 ? (ar ? 'خصم: ' : 'Discount: ') + money(r.discount, lang) : '',
     (ar ? 'المجموع: ' : 'Total: ') + money(r.total, lang) + ' · ' + r.method_label,

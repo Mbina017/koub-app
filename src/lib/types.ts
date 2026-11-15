@@ -245,7 +245,10 @@ export type StaffQuote = { subtotal: number; delivery: number | null; total: num
 // stamp: a drink that earns a KOUB card stamp and can be the free drink (API 1.16; before that, every menu item).
 export type PosShelf = 'coffee' | 'tea' | 'sweets' | 'goods';
 // shelf / temp (API 1.19): where the till shows it (coffee hot / cold, tea, sweets, goods).
-export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; shelf?: PosShelf; temp?: 'hot' | 'cold' | null; stamp?: boolean; sku: string; price: number; stock: number | null; image: string | null };
+export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; shelf?: PosShelf; temp?: 'hot' | 'cold' | null; stamp?: boolean; sku: string; price: number; stock: number | null; image: string | null;
+  // API 1.22: an item that is several drinks (e.g. Flat white / Latte / Cappuccino): one is picked at the POS.
+  choices?: PosChoice[] };
+export type PosChoice = { key: string; label: string };
 // loyalty: the KOUB card rules (API 1.11+), null when cards are off.
 export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null;
   // Training mode (API 1.20): sales are practice only, nothing is real.
@@ -253,14 +256,17 @@ export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; la
   // BenefitPay (API 1.21): what the shop's QR encodes, shown on the till for the customer to scan.
   benefit_qr?: string | null };
 // A barista ticket (API 1.17): the menu items of one till sale.
-export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean }[] };
+export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean; options?: string }[];
+  // Today's order number (API 1.22): staff call the customer by it.
+  no?: number | null };
 export type BarList = { tickets: BarTicket[]; waiting: number };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
 export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number };
 export type ReceiptLoyalty = { code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number };
 export type PosSaleInput = {
   ref: string;
-  lines: { id: number; qty: number }[];
+  // choice / note (API 1.22): the drink picked for a combined item, and a short note for the barista.
+  lines: { id: number; qty: number; choice?: string; note?: string }[];
   method: PosMethod;
   discount: number;
   discount_type: 'amount' | 'percent';
@@ -281,7 +287,10 @@ export type PosReceipt = {
   number: string;
   status: string;
   date: string | null;
-  lines: { name: string; qty: number; total: number }[];
+  // options (API 1.22): the drink chosen and the note, e.g. "Latte · no sugar".
+  lines: { name: string; qty: number; total: number; options?: string }[];
+  // Today's order number (API 1.22).
+  no?: number | null;
   discount: number;
   total: number;
   method: PosMethod;

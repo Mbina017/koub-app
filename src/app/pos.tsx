@@ -1,4 +1,6 @@
-// Shop till: tap items to build a sale, take card or BenefitPay (no cash since API 1.21), and hand over a receipt.
+// KOUB POS: tap items to build an order (a combined item asks which drink; a long press adds a note), take card or
+// BenefitPay (no cash since API 1.21), and hand over a receipt with today's order number (API 1.22).
+// On an iPad the order stays open beside the products, like a counter POS.
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
 import { useEffect, useMemo, useState } from 'react';
@@ -15,7 +17,8 @@ import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
-import type { LoyaltyCard, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
+import type { LoyaltyCard, PosChoice, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
+import { PosOptions, type PosPick } from '../components/PosOptions';
 import { LoyaltyScan } from '../components/LoyaltyScan';
 import { QrCode } from '../components/QrCode';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
@@ -23,6 +26,10 @@ import { Icon } from '../components/Icon';
 
 // Rounds like the store's PHP round(): 0.30749999… (float error for 0.3075) goes up, so totals always agree.
 const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
+// One order line: a product, the drink picked (combined items) and a note; same three together add up.
+type Line = { key: string; p: PosProduct; qty: number; choice: PosChoice | null; note: string };
+type CartLine = { key: string; id: number; qty: number; choice: PosChoice | null; note: string };
+const lineKey = (id: number, choice: PosChoice | null, note: string) => id + '|' + (choice?.key ?? '') + '|' + note;
 const newRef = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const parse = (s: string) => { const n = Number(s.replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; };
 const tick = (kind: 'light' | 'ok' | 'warn') => {
@@ -44,11 +51,14 @@ export default function Pos() {
   const [group, setGroup] = useState<'all' | 'drinks' | 'products'>('all');
   const [shelf, setShelf] = useState<PosShelf>('coffee');
   const [temp, setTemp] = useState<'hot' | 'cold'>('hot');
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [optFor, setOptFor] = useState<PosProduct | null>(null);
   const [open, setOpen] = useState(false);
   // More tiles across on a tablet.
   const { width } = useWindowDimensions();
-  const cols = width >= 1100 ? 5 : width >= 768 ? 4 : 2;
+  // An iPad (or a wide window) keeps the order open beside the products.
+  const wide = width >= 900;
+  const cols = wide ? (width >= 1300 ? 4 : 3) : width >= 768 ? 4 : 2;
 
   const products = q.data?.products ?? [];
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -66,16 +76,32 @@ export default function Pos() {
   const shown = products.filter((p) => query ? (p.name + ' ' + p.sku).toLowerCase().includes(query)
     : useShelves ? p.shelf === shelf && (shelf !== 'coffee' || temps.length < 2 || p.temp === temp)
     : group === 'all' || p.group === group);
-  const lines = Object.entries(cart).map(([id, qty]) => ({ p: byId.get(Number(id)), qty })).filter((l): l is { p: PosProduct; qty: number } => !!l.p && l.qty > 0);
+  const lines = cart.map((c) => ({ ...c, p: byId.get(c.id) })).filter((l): l is Line & CartLine => !!l.p && l.qty > 0) as Line[];
+  const perProduct = (id: number) => cart.reduce((n, c) => n + (c.id === id ? c.qty : 0), 0);
   const count = lines.reduce((s, l) => s + l.qty, 0);
   const subtotal = r3(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
 
-  const setQty = (p: PosProduct, qty: number) => {
+  // Stock is per product, whatever the drink picked or the note.
+  const fits = (p: PosProduct, extra: number) => {
     const max = p.stock === null ? 99 : Math.min(99, p.stock);
-    if (qty > max) { tick('warn'); showMessage(p.name, t('posNoMore', { n: Math.max(0, p.stock ?? 0) })); return; }
-    tick('light');
-    setCart((c) => { const n = { ...c }; if (qty <= 0) delete n[p.id]; else n[p.id] = qty; return n; });
+    if (perProduct(p.id) + extra > max) { tick('warn'); showMessage(p.name, t('posNoMore', { n: Math.max(0, p.stock ?? 0) })); return false; }
+    return true;
   };
+  const add = (p: PosProduct, pick: PosPick) => {
+    if (!fits(p, pick.qty)) return;
+    tick('light');
+    const key = lineKey(p.id, pick.choice, pick.note);
+    setCart((c) => (c.some((x) => x.key === key) ? c.map((x) => (x.key === key ? { ...x, qty: Math.min(99, x.qty + pick.qty) } : x)) : [...c, { key, id: p.id, qty: pick.qty, choice: pick.choice, note: pick.note }]));
+  };
+  const setLineQty = (key: string, qty: number) => {
+    const line = lines.find((l) => l.key === key);
+    if (line && qty > line.qty && !fits(line.p, qty - line.qty)) return;
+    tick('light');
+    setCart((c) => (qty <= 0 ? c.filter((x) => x.key !== key) : c.map((x) => (x.key === key ? { ...x, qty } : x))));
+  };
+  // A combined item asks which drink; anything else goes straight in. A long press on a drink opens notes.
+  const press = (p: PosProduct) => (p.choices?.length ? setOptFor(p) : add(p, { choice: null, note: '', qty: 1 }));
+  const hold = (p: PosProduct) => { if (p.group === 'drinks') { tick('light'); setOptFor(p); } };
 
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
@@ -114,6 +140,8 @@ export default function Pos() {
           <Txt size={13} weight="semibold" tint={color.bg} style={{ flex: 1 }}>{t('posTraining')}</Txt>
         </Row>
       ) : null}
+      <View style={{ flex: 1, flexDirection: wide ? 'row' : 'column' }}>
+      <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
         <Row style={st.search}>
           <Icon name="search" size={18} tint={color.faint} />
@@ -140,15 +168,16 @@ export default function Pos() {
           numColumns={cols}
           keyExtractor={(p) => String(p.id)}
           columnWrapperStyle={{ gap: space.md }}
-          contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + (count ? 110 : space.xl) }}
+          contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + (count && !wide ? 110 : space.xl) }}
+          ListFooterComponent={count === 0 ? <Muted center size={12} style={{ marginTop: space.sm }}>{t('posHoldHint')}</Muted> : undefined}
           ListEmptyComponent={<Empty title={t('posNoProducts')} icon="products" />}
           onRefresh={() => { q.refetch(); }}
           refreshing={q.isRefetching}
           renderItem={({ item: p }) => {
-            const inCart = cart[p.id] ?? 0;
+            const inCart = perProduct(p.id);
             const out = p.stock !== null && p.stock <= 0;
             return (
-              <Touch onPress={() => setQty(p, inCart + 1)} disabled={out} style={[st.tile, inCart > 0 && st.tileOn, out && { opacity: 0.45 }]} accessibilityLabel={p.name}>
+              <Touch onPress={() => press(p)} onLongPress={() => hold(p)} delayLongPress={350} disabled={out} style={[st.tile, inCart > 0 && st.tileOn, out && { opacity: 0.45 }]} accessibilityLabel={p.name}>
                 <View style={st.thumb}>{p.image ? <Image source={p.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} /> : <Icon name="products" size={28} tint={color.faint} />}</View>
                 <Txt size={14} weight="semibold" lines={2}>{p.name}</Txt>
                 <Row style={{ justifyContent: 'space-between' }}>
@@ -161,11 +190,31 @@ export default function Pos() {
           }}
         />
       )}
-      {count > 0 && (
+      </View>
+      {wide && (
+        // The open order, always in view on an iPad: lines with their options, quantities, total, pay.
+        <View style={[st.panel, { paddingBottom: insets.bottom + space.md }]}>
+          <Row style={{ justifyContent: 'space-between', marginBottom: space.sm }}>
+            <Txt size={18} weight="bold">{t('posOrder') + (count ? ' · ' + count : '')}</Txt>
+            {count > 0 && <Touch onPress={() => { tick('light'); setCart([]); }} style={{ padding: 6 }}><Muted>{t('posClear')}</Muted></Touch>}
+          </Row>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+            {count ? <OrderLines lines={lines} setLineQty={setLineQty} /> : <Empty title={t('posOrderEmpty')} icon="cash" />}
+          </ScrollView>
+          <Row style={{ justifyContent: 'space-between', paddingVertical: space.md }}>
+            <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
+            <Txt size={24} weight="bold">{money(subtotal, lang)}</Txt>
+          </Row>
+          <Button label={t('posPay', { n: count, x: money(subtotal, lang) })} icon="cash" disabled={!count} onPress={() => setOpen(true)} />
+        </View>
+      )}
+      </View>
+      {count > 0 && !wide && (
         <View style={[st.bar, { paddingBottom: insets.bottom + space.md }]}>
           <Button label={t('posPay', { n: count, x: money(subtotal, lang) })} icon="cash" onPress={() => setOpen(true)} />
         </View>
       )}
+      <PosOptions product={optFor} onClose={() => setOptFor(null)} onAdd={(p, pick) => { add(p, pick); setOptFor(null); }} />
       <Checkout
         open={open}
         lines={lines}
@@ -173,10 +222,10 @@ export default function Pos() {
         methods={q.data?.methods ?? []}
         benefitQr={q.data?.benefit_qr ?? null}
         loyaltyOn={!!q.data?.loyalty}
-        setQty={setQty}
+        setLineQty={setLineQty}
         onClose={() => setOpen(false)}
         onDone={() => {
-          setCart({});
+          setCart([]);
           for (const k of ['pos-catalog', 'pos-today', 'pos-books', 'home', 'products', 'numbers', 'orders', 'bar']) qc.invalidateQueries({ queryKey: [k] });
         }}
       />
@@ -184,9 +233,34 @@ export default function Pos() {
   );
 }
 
-function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setQty, onClose, onDone }: {
-  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[]; benefitQr: string | null; loyaltyOn: boolean;
-  setQty: (p: PosProduct, qty: number) => void; onClose: () => void; onDone: () => void;
+// The order's lines with what was picked and noted, each with − / + (used beside the products and at payment).
+function OrderLines({ lines, setLineQty }: { lines: Line[]; setLineQty: (key: string, qty: number) => void }) {
+  const { lang } = useSession();
+  return (
+    <View>
+      {lines.map((l, i) => (
+        <Row key={l.key} gap={10} style={[{ paddingVertical: 10 }, i > 0 && st.sep]}>
+          <View style={{ flex: 1 }}>
+            {/* A combined item reads as the drink picked ("Latte"), with the note under it. */}
+            <Txt size={15} weight="semibold" lines={2}>{l.choice?.label ?? l.p.name}</Txt>
+            {l.note ? <Txt size={13} weight="semibold" tint={color.amber} lines={2}>{l.note}</Txt> : null}
+            <Muted size={12}>{money(l.p.price, lang)}</Muted>
+          </View>
+          <Row gap={6}>
+            <Touch onPress={() => setLineQty(l.key, l.qty - 1)} style={st.step} accessibilityLabel="-"><Txt size={18} weight="bold" center>−</Txt></Touch>
+            <Txt size={16} weight="bold" style={{ minWidth: 24 }} center>{l.qty}</Txt>
+            <Touch onPress={() => setLineQty(l.key, l.qty + 1)} style={st.step} accessibilityLabel="+"><Txt size={18} weight="bold" center>+</Txt></Touch>
+          </Row>
+          <Txt size={14} weight="semibold" style={{ minWidth: 64, textAlign: lang === 'ar' ? 'left' : 'right' }}>{money(r3(l.p.price * l.qty), lang)}</Txt>
+        </Row>
+      ))}
+    </View>
+  );
+}
+
+function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLineQty, onClose, onDone }: {
+  open: boolean; lines: Line[]; subtotal: number; methods: { key: PosMethod; label: string }[]; benefitQr: string | null; loyaltyOn: boolean;
+  setLineQty: (key: string, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
   const { t, lang, cashier } = useSession();
@@ -210,7 +284,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setQty
   const [phone, setPhone] = useState('');
   const [done, setDone] = useState<PosReceipt | null>(null);
   // A new basket is a new sale: the reference only survives retries of the same items.
-  const basket = lines.map((l) => l.p.id + 'x' + l.qty).join(',');
+  const basket = lines.map((l) => l.key + 'x' + l.qty).join(',');
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dv = parse(disc);
@@ -227,7 +301,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setQty
 
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
-      ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty })), method, discount: dv, discount_type: discType,
+      ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
       ...(needPin ? { owner_pin: pin.trim() } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
@@ -253,7 +327,12 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setQty
         {done ? (
           <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}>
             <View style={[st.card, { alignItems: 'center', gap: 6, paddingVertical: space.xl }]}>
-              <View style={st.okDot}><Icon name="check" size={30} tint={color.bg} /></View>
+              {done.no ? (
+                <View style={st.noBox}>
+                  <Muted size={13}>{t('posOrderNo')}</Muted>
+                  <Txt size={56} weight="bold">{String(done.no)}</Txt>
+                </View>
+              ) : <View style={st.okDot}><Icon name="check" size={30} tint={color.bg} /></View>}
               <Txt size={28} weight="bold">{money(done.total, lang)}</Txt>
               <Muted>{done.method_label}{done.repeat ? ' · ' + t('posAlreadySaved') : ''}</Muted>
               {done.loyalty && !done.loyalty.failed && (
@@ -274,20 +353,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setQty
           <>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xl }}>
               <View style={st.card}>
-                {lines.map((l, i) => (
-                  <Row key={l.p.id} gap={10} style={[{ paddingVertical: 8 }, i > 0 && st.sep]}>
-                    <View style={{ flex: 1 }}>
-                      <Txt size={15} weight="semibold" lines={2}>{l.p.name}</Txt>
-                      <Muted size={12}>{money(l.p.price, lang)}</Muted>
-                    </View>
-                    <Row gap={6}>
-                      <Touch onPress={() => setQty(l.p, l.qty - 1)} style={st.step} accessibilityLabel="-"><Txt size={18} weight="bold" center>−</Txt></Touch>
-                      <Txt size={16} weight="bold" style={{ minWidth: 24 }} center>{l.qty}</Txt>
-                      <Touch onPress={() => setQty(l.p, l.qty + 1)} style={st.step} accessibilityLabel="+"><Txt size={18} weight="bold" center>+</Txt></Touch>
-                    </Row>
-                    <Txt size={14} weight="semibold" style={{ minWidth: 70, textAlign: lang === 'ar' ? 'left' : 'right' }}>{money(r3(l.p.price * l.qty), lang)}</Txt>
-                  </Row>
-                ))}
+                <OrderLines lines={lines} setLineQty={setLineQty} />
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
 
@@ -395,6 +461,8 @@ const st = StyleSheet.create({
   sep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   step: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, justifyContent: 'center' },
   input: { minHeight: 46, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, backgroundColor: color.surface, paddingHorizontal: 12, fontSize: 16, color: color.ink },
+  panel: { width: 380, borderStartWidth: StyleSheet.hairlineWidth, borderStartColor: color.line, backgroundColor: color.surface, paddingHorizontal: space.lg, paddingTop: space.md },
+  noBox: { alignItems: 'center', paddingHorizontal: 28, paddingVertical: 8, borderRadius: radius.lg, backgroundColor: color.sunken, marginBottom: 6 },
   okDot: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.green, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   change: { marginTop: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: color.greenBg },
 });
