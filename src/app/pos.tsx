@@ -367,6 +367,13 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
             </View>
+            {done.track && done.status !== 'cancelled' && (
+              // The customer's own page (API 1.27): they scan it and see when the order is ready.
+              <View style={[st.card, { alignItems: 'center', gap: 8 }]}>
+                <View style={{ padding: 8, backgroundColor: '#FFFFFF', borderRadius: radius.md }}><QrCode value={done.track} size={170} /></View>
+                <Muted center>{t('trackScan')}</Muted>
+              </View>
+            )}
             <Button label={t('posShareReceipt')} icon="print" kind="light" onPress={() => sharePdf(receiptHtml(done, lang), 'KOUB-' + done.number, RECEIPT_SIZE).catch(() => {})} />
             {done.whatsapp && (
               <Button label={t('posWhatsappReceipt')} icon="whatsapp" kind="light"

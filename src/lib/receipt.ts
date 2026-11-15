@@ -47,5 +47,6 @@ export function receiptText(r: PosReceipt, lang: Lang) {
     items,
     r.discount > 0 ? (ar ? 'خصم: ' : 'Discount: ') + money(r.discount, lang) : '',
     (ar ? 'المجموع: ' : 'Total: ') + money(r.total, lang) + ' · ' + r.method_label,
+    r.track ? (ar ? 'تابع طلبك: ' : 'Follow your order: ') + r.track : '',
   ].filter(Boolean).join('\n');
 }

@@ -263,7 +263,14 @@ export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; la
   pay_ref?: PayRefMode };
 export type PayRefMode = 'required' | 'optional' | 'off';
 // A barista ticket (API 1.17): the menu items of one till sale.
-export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean; options?: string }[];
+export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string;
+  // i / ready (API 1.27): the item's place on the sale, and whether it is ready.
+  lines: { name: string; qty: number; drink?: boolean; options?: string; i?: number; ready?: boolean }[];
+  // API 1.27: who is making it, and the customer's private page.
+  started?: { by: string; mine: boolean; at: string | null } | null;
+  track?: string | null;
+  // API 1.29: ordered ahead online, the pickup time the customer chose.
+  pickup?: string | null;
   // Today's order number (API 1.22): staff call the customer by it.
   no?: number | null;
   // API 1.23: where to hand it over (in the shop, or the car).
@@ -317,11 +324,28 @@ export type PosReceipt = {
   pay_ref?: string | null;
   // API 1.26: a cancelled sale: what happened to the money.
   refund?: { state: RefundState; ref: string | null; amount: number } | null;
+  // API 1.27: the customer's private order page (shown as a QR after the sale).
+  track?: string | null;
 };
 export type RefundState = 'done' | 'owed' | 'none';
 export type CancelReason = 'mistake' | 'changed' | 'unpaid' | 'other';
 export type PosCancelInput = { owner_pin?: string; reason: CancelReason; reason_note?: string; refund: RefundState; refund_ref?: string; made?: boolean };
 export type RefundOwed = { id: number; no: number | null; number: string; date: string | null; amount: number; method: PosMethod; pay_ref: string | null; name: string; whatsapp: string | null; training: boolean };
+// Order ahead (API 1.29), owner only: koubbh.com/order.
+export type AheadSettings = { on: boolean; from: string; to: string; cap: number; lead: number; slots: { t: number; label: string; free: number }[]; url: string };
+// Ingredient stock (API 1.28), owner only.
+export type StockUnit = 'g' | 'ml' | 'pc';
+export type Ingredient = { id: string; name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number; days_left: number | null; is_low: boolean };
+export type RecipeItem = { ing: string; qty: number };
+export type StockProduct = { id: number; name: string; price: number; choices: PosChoice[]; recipe: Record<string, RecipeItem[]>; cost: number | null; margin: number | null };
+export type StockView = { ingredients: Ingredient[]; products: StockProduct[]; log: { at: string | null; ing: string; d: number; why: string; order: number | null; note: string }[] };
+// Shop insights (API 1.28), owner only.
+export type InsightsPeriod = 'today' | '7days' | '30days';
+export type InsightItem = { id: number; name: string; qty: number; total: number; cost: number | null; profit: number | null };
+export type Insights = { period: InsightsPeriod; days: number; count: number; total: number; avg: number; cups: number; per_day: number;
+  hours: { count: number; total: number }[]; busiest_hour: number | null; week: { count: number; total: number }[];
+  wait: Record<'ready' | 'handed', { n: number; median: number | null; p90: number | null }>;
+  top: InsightItem[]; top_money: InsightItem[]; methods: Partial<Record<PosMethod, number>>; cancels: Partial<Record<CancelReason, number>>; waste: { name: string; qty: number }[] };
 // Go-live list (API 1.26), owner only.
 export type GoliveCheck = { key: 'staff' | 'pin' | 'benefit_qr' | 'pay_ref' | 'stock' | 'practice_close' | 'refunds' | 'training'; ok: boolean | null; active?: number; pending?: number; mode?: string; managed?: number; zero?: number; closes?: number; owed?: number; on?: boolean; sales?: number };
 export type PosGolive = { checks: GoliveCheck[]; training: boolean; deleted?: number };

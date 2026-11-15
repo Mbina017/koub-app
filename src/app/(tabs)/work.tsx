@@ -110,13 +110,26 @@ function HandOver({ tickets }: { tickets: BarTicket[] }) {
 
 function Ticket({ x }: { x: BarTicket }) {
   const session = useApiSession();
-  const { t } = useSession();
+  const { t, lang } = useSession();
   const qc = useQueryClient();
   const move = useMutation({
     mutationFn: (state: BarTicket['state']) => api.barSet(session, x.id, state),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bar'] }),
     onError: (e) => showMessage(t('notUpdated'), e.message),
   });
+  // API 1.27: Start (who is making it) and one item ready; the store moves the ticket to ready when all are.
+  const start = useMutation({
+    mutationFn: (take: boolean) => api.barStart(session, x.id, take),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bar'] }),
+    onError: (e) => showMessage(t('notUpdated'), e.message),
+  });
+  const item = useMutation({
+    mutationFn: (v: { i: number; ready: boolean }) => api.barItem(session, x.id, v.i, v.ready),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bar'] }),
+    onError: (e) => showMessage(t('notUpdated'), e.message),
+  });
+  const perItem = x.lines.some((l) => l.i !== undefined);
+  const readyN = x.lines.filter((l) => l.ready).length;
   const waited = minutes(x.since);
   const late = x.state === 'waiting' && waited >= 10 ? color.red : x.state === 'waiting' && waited >= 5 ? color.amber : color.muted;
   const done = x.state === 'done';
@@ -128,14 +141,25 @@ function Ticket({ x }: { x: BarTicket }) {
         <Txt size={20} weight="bold" style={{ flex: 1 }} lines={1}>{x.name || '#' + x.number}</Txt>
         <Txt size={14} weight="semibold" tint={late}>{t('workMin', { n: waited })}</Txt>
       </Row>
-      {x.lines.map((l, i) => (
-        <Row key={i} gap={10}><View style={st.qty}><Txt size={16} weight="bold" center>{l.qty}</Txt></View><View style={{ flex: 1 }}><Txt size={17} weight="medium">{l.name}</Txt>{l.options ? <Txt size={14} weight="semibold" tint={color.amber}>{l.options}</Txt> : null}</View>{l.drink === false && <Icon name="products" size={16} tint={color.faint} />}</Row>
-      ))}
+      {x.started && !done && (
+        <Row gap={6}><View style={[st.dotSm, { backgroundColor: x.started.mine ? color.green : color.amber }]} /><Muted size={13}>{t('workStartedBy', { n: x.started.mine ? t('you') : x.started.by })}</Muted>
+          {!x.started.mine && <Touch onPress={() => start.mutate(true)} disabled={start.isPending}><Txt size={13} weight="semibold" tint={color.ink}>{' · ' + t('workTake')}</Txt></Touch>}</Row>
+      )}
+      {x.lines.map((l, i) => {
+        const line = (<><View style={[st.qty, l.ready && { backgroundColor: color.green }]}>{l.ready ? <Icon name="check" size={18} tint={color.bg} /> : <Txt size={16} weight="bold" center>{l.qty}</Txt>}</View><View style={{ flex: 1 }}><Txt size={17} weight="medium" style={l.ready ? { textDecorationLine: 'line-through', color: color.muted } : undefined}>{(l.ready ? l.qty + '× ' : '') + l.name}</Txt>{l.options ? <Txt size={14} weight="semibold" tint={color.amber}>{l.options}</Txt> : null}</View>{l.drink === false && <Icon name="products" size={16} tint={color.faint} />}</>);
+        // Tap an item when it is made (API 1.27); older stores have no item index, so the line stays plain.
+        return perItem && !done
+          ? <Touch key={i} onPress={() => item.mutate({ i: l.i!, ready: !l.ready })} style={st.lineRow} accessibilityState={{ checked: !!l.ready }}>{line}</Touch>
+          : <Row key={i} gap={10}>{line}</Row>;
+      })}
+      {perItem && !done && x.lines.length > 1 && <Muted size={12}>{t('workItemsReady', { r: readyN, n: x.lines.length })}</Muted>}
+      {x.pickup ? <View style={[st.where, { backgroundColor: color.blueBg }]}><Txt size={15} weight="semibold">{t('workPickup', { t: new Date(x.pickup).toLocaleTimeString(lang === 'ar' ? 'ar-BH' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' }) })}</Txt></View> : null}
       {x.where ? <View style={st.where}><Txt size={15} weight="semibold">{x.where}</Txt></View> : null}
       {x.note ? <Muted>{x.note}</Muted> : null}
       <Muted size={12}>{'#' + x.number}</Muted>
       {!done && (
         <Row gap={8}>
+          {x.state === 'waiting' && perItem && !x.started && <Button label={t('workStart')} kind="light" disabled={start.isPending} onPress={() => start.mutate(false)} />}
           {x.state === 'waiting' && <Button label={t('workReady')} kind="ghost" disabled={move.isPending} onPress={() => move.mutate('ready')} />}
           {x.state === 'ready' && x.whatsapp && (
             <Touch onPress={() => Linking.openURL('https://wa.me/' + x.whatsapp + '?text=' + encodeURIComponent(t('workReadyMsg', { n: x.name || '' }))).catch(() => {})} style={st.side}>
@@ -188,6 +212,8 @@ const st = StyleSheet.create({
   ready: { borderWidth: 2, borderColor: color.green },
   where: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: color.amberBg },
   no: { minWidth: 40, height: 40, borderRadius: 12, paddingHorizontal: 8, backgroundColor: color.ink, justifyContent: 'center', marginEnd: 10 },
+  lineRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2 },
+  dotSm: { width: 8, height: 8, borderRadius: 4 },
   qty: { minWidth: 34, height: 34, borderRadius: 10, backgroundColor: color.sunken, justifyContent: 'center', paddingHorizontal: 6 },
   shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: space.lg },
   side: { width: 52, borderRadius: radius.md, backgroundColor: color.greenBg, alignItems: 'center', justifyContent: 'center' },

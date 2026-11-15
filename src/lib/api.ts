@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, AheadSettings, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -135,6 +135,15 @@ export const api = {
   posVoid: (s: Session, id: number, c: PosCancelInput) => post<PosReceipt>(s, '/pos/sale/' + id + '/void', { ...c, lang: appLang }),
   // A refund still owed (API 1.26), given back later with its number; "none" needs the owner (or the PIN).
   posRefund: (s: Session, id: number, state: 'done' | 'none', ref = '', ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/refund', { state, ref, owner_pin: ownerPin, lang: appLang }),
+  // Order ahead (API 1.29), owner only.
+  posAhead: (s: Session) => get<AheadSettings>(s, '/pos/ahead'),
+  posAheadSet: (s: Session, x: { on: boolean; from: string; to: string; cap: number; lead: number }) => post<AheadSettings>(s, '/pos/ahead', { ...x, lang: appLang }),
+  // Ingredient stock and insights (API 1.28), owner only.
+  posStock: (s: Session) => get<StockView>(s, '/pos/stock'),
+  posStockIng: (s: Session, x: { id?: string; name: string; unit: StockUnit; low: number; cost: number }) => post<StockView>(s, '/pos/stock/ingredient', { ...x, lang: appLang }),
+  posStockMove: (s: Session, id: string, qty: number, why: 'receive' | 'count' | 'waste', note = '') => post<StockView>(s, '/pos/stock/move', { id, qty, why, note, lang: appLang }),
+  posStockRecipe: (s: Session, product: number, choice: string, items: RecipeItem[]) => post<StockView>(s, '/pos/stock/recipe', { product, choice, items, lang: appLang }),
+  posInsights: (s: Session, period: InsightsPeriod) => get<Insights>(s, '/pos/insights', { period }),
   // Go-live list (API 1.26), owner only.
   posGolive: (s: Session) => get<PosGolive>(s, '/pos/golive'),
   posGoliveAct: (s: Session, action: 'training_off' | 'training_on' | 'clear_training', confirm: string) => post<PosGolive>(s, '/pos/golive', { action, confirm, lang: appLang }),
@@ -152,6 +161,9 @@ export const api = {
   // The barista queue (API 1.17).
   bar: (s: Session) => get<BarList>(s, '/bar'),
   barSet: (s: Session, id: number, state: BarTicket['state']) => post<BarTicket>(s, '/bar/' + id, { state, lang: appLang }),
+  // API 1.27: "Start" (take = take it over from another barista), and one item ready.
+  barStart: (s: Session, id: number, take = false) => post<BarTicket>(s, '/bar/' + id + '/start', { take, lang: appLang }),
+  barItem: (s: Session, id: number, index: number, ready: boolean) => post<BarTicket>(s, '/bar/' + id + '/item', { index, ready, lang: appLang }),
   posStaffReport: (s: Session, period: ShopPeriod) => get<PosStaffReport>(s, '/pos/staff-report', { period }),
   // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),

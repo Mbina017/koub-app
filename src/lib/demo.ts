@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { CloseMethod, PosCloseEntry, PosCloseReport, PosGolive, RefundState, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { AheadSettings, CloseMethod, PosCloseEntry, PosCloseReport, PosGolive, RefundState, StockUnit, StockView, RecipeItem, Insights, InsightsPeriod, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -280,6 +280,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
     lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty), options: [demoChoices[l.id - 700]?.find((c) => c.key === l.choice)?.label, l.note].filter(Boolean).join(' · ') })), discount, total, method, method_label: methodLabel(method, en),
     cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
     pay_ref: p.pay_ref ? String(p.pay_ref) : null,
+    track: 'https://koubbh.com/o/DEMO' + String(1e7 + posSales.length).slice(0, 8),
   };
   posSales.unshift(sale);
   return sale;
@@ -290,6 +291,8 @@ const demoBar: BarTicket[] = [
   { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
   { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
+demoBar.forEach((x) => x.lines.forEach((l, i) => { l.i = i; l.ready = false; }));
+demoBar[1].pickup = new Date(Math.ceil((Date.now() + 20 * 60_000) / 900_000) * 900_000).toISOString();
 // Till staff (API 1.15), demo only.
 let demoPin = false;
 const demoStaff: PosStaff[] = [
@@ -317,6 +320,41 @@ function posToday(): PosToday {
   live.forEach((s) => (by[s.method] = Math.round((by[s.method] + s.total) * 1000) / 1000));
   return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
     sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
+}
+// Order ahead (API 1.29), demo only.
+const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
+function aheadView(): AheadSettings {
+  const now = Date.now(); const first = Math.ceil((now + demoAhead.lead * 60_000) / 900_000) * 900_000;
+  const slots = Array.from({ length: 12 }, (_, i) => first + i * 900_000).map((ms, i) => ({ t: ms / 1000, label: new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' }), free: i === 2 ? 0 : demoAhead.cap - (i % 3) }));
+  return { ...demoAhead, slots, url: 'https://koubbh.com/order' };
+}
+// Ingredient stock and insights (API 1.28), demo only.
+const demoIng: Record<string, { name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number }> = {
+  beans: { name: 'بن إسبريسو', unit: 'g', stock: 1850, low: 1000, cost: 0.012, per_day: 640 },
+  milk: { name: 'حليب', unit: 'ml', stock: 7200, low: 4000, cost: 0.0005, per_day: 3100 },
+  cup: { name: 'كوب ورق KOUB', unit: 'pc', stock: 140, low: 60, cost: 0.035, per_day: 38 },
+  lid: { name: 'غطاء', unit: 'pc', stock: 45, low: 60, cost: 0.012, per_day: 38 },
+};
+const demoRecipes: Record<number, Record<string, RecipeItem[]>> = { 700: { '': [{ ing: 'beans', qty: 18 }, { ing: 'cup', qty: 1 }, { ing: 'lid', qty: 1 }] } };
+function stockView(): StockView {
+  const cost = (id: number) => { const r = demoRecipes[id]?.['']; return r ? Math.round(r.reduce((a, x) => a + x.qty * (demoIng[x.ing]?.cost ?? 0), 0) * 1000) / 1000 : null; };
+  return {
+    ingredients: Object.entries(demoIng).map(([id, x]) => ({ id, ...x, days_left: x.per_day ? Math.round((x.stock / x.per_day) * 10) / 10 : null, is_low: x.stock <= x.low }))
+      .sort((a, b) => Number(b.is_low) - Number(a.is_low)),
+    products: menuDrinks.slice(0, 6).map(([name, price], i) => { const c = cost(700 + i); return { id: 700 + i, name, price, choices: demoChoices[i] ?? [], recipe: demoRecipes[700 + i] ?? {}, cost: c, margin: c === null ? null : Math.round((price - c) * 1000) / 1000 }; }),
+    log: [],
+  };
+}
+function insights(period: string): Insights {
+  const k = period === 'today' ? 1 : period === '30days' ? 30 : 7;
+  const shape = [0, 0, 0, 0, 0, 0, 0, 3, 9, 7, 5, 4, 6, 5, 4, 6, 8, 12, 15, 11, 7, 4, 1, 0];
+  const hours = shape.map((c) => ({ count: c * k, total: Math.round(c * k * 1.9 * 1000) / 1000 }));
+  const count = hours.reduce((a, h) => a + h.count, 0); const total = Math.round(hours.reduce((a, h) => a + h.total, 0) * 1000) / 1000;
+  const top = menuDrinks.slice(0, 6).map(([name, price], i) => { const qty = Math.round((40 - i * 6) * k / 2); return { id: 700 + i, name, qty, total: Math.round(qty * price * 1000) / 1000, cost: i === 0 ? Math.round(qty * 0.263 * 1000) / 1000 : null, profit: i === 0 ? Math.round(qty * (price - 0.263) * 1000) / 1000 : null }; });
+  return { period: period as InsightsPeriod, days: k, count, total, avg: Math.round((total / Math.max(1, count)) * 1000) / 1000, cups: Math.round(count * 1.4), per_day: Math.round((total / k) * 1000) / 1000,
+    hours, busiest_hour: 18, week: [0.9, 0.8, 0.85, 0.9, 1.3, 1.5, 1].map((f) => ({ count: Math.round((count / 7) * f), total: Math.round((total / 7) * f * 1000) / 1000 })),
+    wait: { ready: { n: count, median: 210, p90: 480 }, handed: { n: count, median: 300, p90: 660 } },
+    top, top_money: [...top].sort((a, b) => b.total - a.total), methods: { card: Math.round(total * 0.62 * 1000) / 1000, benefit: Math.round(total * 0.38 * 1000) / 1000 }, cancels: { changed: k, mistake: Math.ceil(k / 2) }, waste: [{ name: 'سبانش لاتيه', qty: k }] };
 }
 // Go-live list (API 1.26), demo only.
 let demoTraining = true;
@@ -423,7 +461,15 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
   if (path === '/pos/close') return posCloseSave(p, p.lang === 'en') as T;
   if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
-  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); return x as T; }
+  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); if (x.state === 'waiting') x.lines.forEach((l) => (l.ready = false)); return x as T; }
+  if (/^\/bar\/\d+\/start$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() }; return x as T; }
+  if (/^\/bar\/\d+\/item$/.test(path)) {
+    const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found');
+    x.lines.forEach((l, i) => { if ((l.i ?? i) === Number(p.index)) l.ready = !!p.ready; });
+    if (!x.started) x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() };
+    if (x.lines.every((l) => l.ready) && x.state === 'waiting') x.state = 'ready'; else if (!x.lines.every((l) => l.ready) && x.state === 'ready') x.state = 'waiting';
+    return x as T;
+  }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
   if (path === '/pos/staff/add') {
     const s: PosStaff = { id: 900 + demoStaff.length, name: String(p.name ?? ''), login: 'till-' + (2000 + demoStaff.length), active: true, last_sale: null };
@@ -459,6 +505,16 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
     s.refund = { ...s.refund, state: p.state === 'none' ? 'none' : 'done', ref: p.state === 'done' ? ref : null };
     return s as T;
   }
+  if (path === '/pos/ahead') { Object.assign(demoAhead, { on: !!p.on, from: String(p.from), to: String(p.to), cap: Number(p.cap), lead: Number(p.lead) }); return aheadView() as T; }
+  if (path === '/pos/stock/move') {
+    const x = demoIng[String(p.id)]; if (!x) throw new Error('not found'); const q = Number(p.qty);
+    x.stock = p.why === 'receive' ? x.stock + q : p.why === 'waste' ? x.stock - q : q; return stockView() as T;
+  }
+  if (path === '/pos/stock/ingredient') {
+    const id = String(p.id || String(p.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'ing-' + Object.keys(demoIng).length);
+    demoIng[id] = { stock: demoIng[id]?.stock ?? 0, per_day: demoIng[id]?.per_day ?? 0, name: String(p.name), unit: p.unit as StockUnit, low: Number(p.low) || 0, cost: Number(p.cost) || 0 }; return stockView() as T;
+  }
+  if (path === '/pos/stock/recipe') { const r = (demoRecipes[Number(p.product)] ??= {}); r[String(p.choice ?? '')] = p.items as RecipeItem[]; return stockView() as T; }
   if (path === '/pos/golive') {
     if (String(p.confirm) !== 'KOUB') throw new Error(p.lang === 'en' ? 'Type KOUB to confirm.' : 'اكتب KOUB عشان تأكد.');
     if (p.action === 'training_off') demoTraining = false; else if (p.action === 'training_on') demoTraining = true;
@@ -647,6 +703,9 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/close') return posClose() as T;
   if (path === '/pos/golive') return posGolive() as T;
+  if (path === '/pos/stock') return stockView() as T;
+  if (path === '/pos/ahead') return aheadView() as T;
+  if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
