@@ -152,6 +152,9 @@ export const api = {
   // The barista queue (API 1.17).
   bar: (s: Session) => get<BarList>(s, '/bar'),
   barSet: (s: Session, id: number, state: BarTicket['state']) => post<BarTicket>(s, '/bar/' + id, { state, lang: appLang }),
+  // API 1.27: "Start" (take = take it over from another barista), and one item ready.
+  barStart: (s: Session, id: number, take = false) => post<BarTicket>(s, '/bar/' + id + '/start', { take, lang: appLang }),
+  barItem: (s: Session, id: number, index: number, ready: boolean) => post<BarTicket>(s, '/bar/' + id + '/item', { index, ready, lang: appLang }),
   posStaffReport: (s: Session, period: ShopPeriod) => get<PosStaffReport>(s, '/pos/staff-report', { period }),
   // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),

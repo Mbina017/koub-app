@@ -263,7 +263,12 @@ export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; la
   pay_ref?: PayRefMode };
 export type PayRefMode = 'required' | 'optional' | 'off';
 // A barista ticket (API 1.17): the menu items of one till sale.
-export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean; options?: string }[];
+export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string;
+  // i / ready (API 1.27): the item's place on the sale, and whether it is ready.
+  lines: { name: string; qty: number; drink?: boolean; options?: string; i?: number; ready?: boolean }[];
+  // API 1.27: who is making it, and the customer's private page.
+  started?: { by: string; mine: boolean; at: string | null } | null;
+  track?: string | null;
   // Today's order number (API 1.22): staff call the customer by it.
   no?: number | null;
   // API 1.23: where to hand it over (in the shop, or the car).
@@ -317,6 +322,8 @@ export type PosReceipt = {
   pay_ref?: string | null;
   // API 1.26: a cancelled sale: what happened to the money.
   refund?: { state: RefundState; ref: string | null; amount: number } | null;
+  // API 1.27: the customer's private order page (shown as a QR after the sale).
+  track?: string | null;
 };
 export type RefundState = 'done' | 'owed' | 'none';
 export type CancelReason = 'mistake' | 'changed' | 'unpaid' | 'other';
