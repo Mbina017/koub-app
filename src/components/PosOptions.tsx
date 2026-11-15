@@ -20,7 +20,7 @@ const QUICK: Record<'hot' | 'cold' | 'other', ('optNoSugar' | 'optLessSugar' | '
   other: [],
 };
 
-export function PosOptions({ product, onClose, onAdd }: { product: PosProduct | null; onClose: () => void; onAdd: (p: PosProduct, pick: PosPick) => void }) {
+export function PosOptions({ product, onClose, onAdd, onOut, outBusy }: { product: PosProduct | null; onClose: () => void; onAdd: (p: PosProduct, pick: PosPick) => void; onOut?: (p: PosProduct, out: boolean) => void; outBusy?: boolean }) {
   const { t, lang } = useSession();
   const insets = useSafeAreaInsets();
   const [choice, setChoice] = useState<PosChoice | null>(null);
@@ -85,6 +85,14 @@ export function PosOptions({ product, onClose, onAdd }: { product: PosProduct | 
             <TextInput value={text} onChangeText={setText} placeholder={t('optNotePh')} placeholderTextColor={color.faint} maxLength={60}
               style={[st.input, { textAlign: lang === 'ar' ? 'right' : 'left', fontFamily: font.regular }]} />
           </ScrollView>
+          {product.out_today ? (
+            // Sold out today: the only thing to do here is put it back.
+            <View style={{ marginTop: space.md, gap: 8 }}>
+              <Muted center>{t('soldOutToday')}</Muted>
+              {onOut && <Button label={t('markBack')} icon="check" loading={outBusy} onPress={() => onOut(product, false)} />}
+            </View>
+          ) : (
+          <>
           <Row gap={12} style={{ marginTop: space.md }}>
             <Row gap={6}>
               <Touch onPress={() => setQty(Math.max(1, qty - 1))} style={st.step} accessibilityLabel="-"><Txt size={20} weight="bold" center>−</Txt></Touch>
@@ -94,6 +102,13 @@ export function PosOptions({ product, onClose, onAdd }: { product: PosProduct | 
             <Button label={t('optAdd', { x: money(product.price * qty, lang) })} icon="plus" disabled={!ready}
               onPress={() => onAdd(product, { choice, note, qty })} style={{ flex: 1 }} />
           </Row>
+          {onOut && (
+            <Touch onPress={() => onOut(product, true)} disabled={outBusy} style={{ alignSelf: 'center', paddingVertical: 10, marginTop: 4 }}>
+              <Txt size={14} weight="semibold" tint={color.red}>{t('markOut')}</Txt>
+            </Touch>
+          )}
+          </>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>

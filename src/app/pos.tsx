@@ -49,7 +49,8 @@ export default function Pos() {
   const toHand = bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<'all' | 'drinks' | 'products'>('all');
-  const [shelf, setShelf] = useState<PosShelf>('coffee');
+  // '⭐ Top' (API 1.23): the best sellers of the week, first when the store sends them.
+  const [shelf, setShelf] = useState<PosShelf | 'top'>('top');
   const [temp, setTemp] = useState<'hot' | 'cold'>('hot');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [optFor, setOptFor] = useState<PosProduct | null>(null);
@@ -66,7 +67,8 @@ export default function Pos() {
   // The menu was emptied since: back to everything rather than an empty tab.
   useEffect(() => { if (!hasDrinks && group !== 'all') setGroup('all'); }, [hasDrinks, group]);
   // Shelves (API 1.19): coffee (hot / cold), tea, sweets, goods. Only the shelves that have something show.
-  const shelves = (['coffee', 'tea', 'sweets', 'goods'] as PosShelf[]).filter((k) => products.some((p) => p.shelf === k));
+  const top = (q.data?.top ?? []).map((id) => byId.get(id)).filter((p): p is PosProduct => !!p);
+  const shelves = [...(top.length ? ['top' as const] : []), ...(['coffee', 'tea', 'sweets', 'goods'] as PosShelf[]).filter((k) => products.some((p) => p.shelf === k))];
   const useShelves = shelves.length > 1;
   const temps = (['hot', 'cold'] as const).filter((k) => products.some((p) => p.shelf === 'coffee' && p.temp === k));
   useEffect(() => { if (useShelves && !shelves.includes(shelf)) setShelf(shelves[0]); }, [useShelves, shelves, shelf]);
@@ -76,6 +78,7 @@ export default function Pos() {
   const shown = products.filter((p) => query ? (p.name + ' ' + p.sku).toLowerCase().includes(query)
     : useShelves ? p.shelf === shelf && (shelf !== 'coffee' || temps.length < 2 || p.temp === temp)
     : group === 'all' || p.group === group);
+  const list = !query && useShelves && shelf === 'top' ? top : shown;
   const lines = cart.map((c) => ({ ...c, p: byId.get(c.id) })).filter((l): l is Line & CartLine => !!l.p && l.qty > 0) as Line[];
   const perProduct = (id: number) => cart.reduce((n, c) => n + (c.id === id ? c.qty : 0), 0);
   const count = lines.reduce((s, l) => s + l.qty, 0);
@@ -100,8 +103,15 @@ export default function Pos() {
     setCart((c) => (qty <= 0 ? c.filter((x) => x.key !== key) : c.map((x) => (x.key === key ? { ...x, qty } : x))));
   };
   // A combined item asks which drink; anything else goes straight in. A long press on a drink opens notes.
-  const press = (p: PosProduct) => (p.choices?.length ? setOptFor(p) : add(p, { choice: null, note: '', qty: 1 }));
-  const hold = (p: PosProduct) => { if (p.group === 'drinks') { tick('light'); setOptFor(p); } };
+  // Sold out today opens the sheet (to put it back); a combined item asks which drink; anything else goes straight in.
+  const press = (p: PosProduct) => (p.out_today || p.choices?.length ? setOptFor(p) : add(p, { choice: null, note: '', qty: 1 }));
+  // A long press opens the sheet: notes for a drink, and "sold out today" for anything.
+  const hold = (p: PosProduct) => { tick('light'); setOptFor(p); };
+  const outM = useMutation({
+    mutationFn: (v: { p: PosProduct; out: boolean }) => api.posOut(session, v.p.id, v.out),
+    onSuccess: (_r, v) => { tick('ok'); setOptFor(null); if (v.out) setCart((c) => c.filter((x) => x.id !== v.p.id)); qc.invalidateQueries({ queryKey: ['pos-catalog'] }); },
+    onError: (e) => showMessage(t('notUpdated'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message),
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
@@ -150,7 +160,7 @@ export default function Pos() {
         </Row>
         {useShelves ? (
           <>
-            <Segmented<PosShelf> items={shelves.map((k) => [k, t(({ coffee: 'shCoffee', tea: 'shTea', sweets: 'shSweets', goods: 'posGoods' } as const)[k])] as [PosShelf, string])} value={shelf} onChange={setShelf} style={{ marginTop: space.sm }} />
+            <Segmented<PosShelf | 'top'> items={shelves.map((k) => [k, t(({ top: 'shTop', coffee: 'shCoffee', tea: 'shTea', sweets: 'shSweets', goods: 'posGoods' } as const)[k])] as [PosShelf | 'top', string])} value={shelf} onChange={setShelf} style={{ marginTop: space.sm }} />
             {shelf === 'coffee' && temps.length > 1 && !query && (
               <Segmented<'hot' | 'cold'> items={[['hot', '☕ ' + t('shHot')], ['cold', '🧊 ' + t('shCold')]]} value={temp} onChange={setTemp} style={{ marginTop: space.sm }} />
             )}
@@ -163,7 +173,7 @@ export default function Pos() {
         <View style={{ padding: space.lg, gap: space.md }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={120} r={radius.lg} />)}</View>
       ) : (
         <FlatList
-          data={shown}
+          data={list}
           key={'cols-' + cols}
           numColumns={cols}
           keyExtractor={(p) => String(p.id)}
@@ -175,14 +185,14 @@ export default function Pos() {
           refreshing={q.isRefetching}
           renderItem={({ item: p }) => {
             const inCart = perProduct(p.id);
-            const out = p.stock !== null && p.stock <= 0;
+            const out = (p.stock !== null && p.stock <= 0) || !!p.out_today;
             return (
-              <Touch onPress={() => press(p)} onLongPress={() => hold(p)} delayLongPress={350} disabled={out} style={[st.tile, inCart > 0 && st.tileOn, out && { opacity: 0.45 }]} accessibilityLabel={p.name}>
+              <Touch onPress={() => press(p)} onLongPress={() => hold(p)} delayLongPress={350} disabled={out && !p.out_today} style={[st.tile, inCart > 0 && st.tileOn, out && { opacity: 0.45 }]} accessibilityLabel={p.name}>
                 <View style={st.thumb}>{p.image ? <Image source={p.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} /> : <Icon name="products" size={28} tint={color.faint} />}</View>
                 <Txt size={14} weight="semibold" lines={2}>{p.name}</Txt>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Txt size={14} weight="bold">{money(p.price, lang)}</Txt>
-                  <Muted size={12}>{out ? t('posOut') : p.stock === null ? '' : t('stockN', { n: p.stock })}</Muted>
+                  <Muted size={12}>{p.out_today ? t('soldOutToday') : out ? t('posOut') : p.stock === null ? '' : t('stockN', { n: p.stock })}</Muted>
                 </Row>
                 {inCart > 0 && <View style={st.badge}><Txt size={13} weight="bold" tint={color.bg} center>{inCart}</Txt></View>}
               </Touch>
@@ -214,7 +224,8 @@ export default function Pos() {
           <Button label={t('posPay', { n: count, x: money(subtotal, lang) })} icon="cash" onPress={() => setOpen(true)} />
         </View>
       )}
-      <PosOptions product={optFor} onClose={() => setOptFor(null)} onAdd={(p, pick) => { add(p, pick); setOptFor(null); }} />
+      <PosOptions product={optFor} onClose={() => setOptFor(null)} onAdd={(p, pick) => { add(p, pick); setOptFor(null); }}
+        onOut={(p, out) => outM.mutate({ p, out })} outBusy={outM.isPending} />
       <Checkout
         open={open}
         lines={lines}
@@ -283,6 +294,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [done, setDone] = useState<PosReceipt | null>(null);
+  // Where to hand it over (API 1.23): in the shop, or the car, described so whoever hands it over finds it.
+  const [where, setWhere] = useState<'' | 'shop' | 'car'>('');
+  const [car, setCar] = useState('');
   // A new basket is a new sale: the reference only survives retries of the same items.
   const basket = lines.map((l) => l.key + 'x' + l.qty).join(',');
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -303,6 +317,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
     mutationFn: () => api.posSale(session, {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
+      ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (car.trim() || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(needPin ? { owner_pin: pin.trim() } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
     }),
@@ -311,7 +326,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
   });
 
   const reset = () => {
-    setRef(newRef()); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -360,6 +375,13 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, loyaltyOn, setLin
               {/* Every sale waits on the hand-over list under this name (API 1.19); on the cup when it has drinks. */}
               {!who && lines.length > 0 && (
                 <TextInput value={name} onChangeText={setName} placeholder={lines.some((l) => l.p.group === 'drinks') ? t('cupName') : t('handName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+              )}
+              {lines.length > 0 && (
+                <View style={{ gap: 8 }}>
+                  <Txt size={14} weight="semibold">{t('whereTitle')}</Txt>
+                  <Segmented<'' | 'shop' | 'car'> items={[['shop', t('whereShop')], ['car', t('whereCar')]]} value={where} onChange={(v) => setWhere(v === where ? '' : v)} />
+                  {where === 'car' && <TextInput value={car} onChangeText={setCar} placeholder={t('wherePh')} placeholderTextColor={color.faint} maxLength={36} style={input} />}
+                </View>
               )}
               {loyaltyOn && (card ? (
                 <View style={[st.card, { gap: 8 }]}>

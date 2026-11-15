@@ -240,17 +240,19 @@ const demoChoices: Record<number, { key: string; label: string }[]> = {
   4: [{ key: 'spanish', label: 'سبانش' }, { key: 'vanilla', label: 'فانيلا' }, { key: 'caramel', label: 'كراميل' }],
 };
 let demoNo = 0;
+let demoOut: number[] = [];
 const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
 function posCatalog(en: boolean): PosCatalog {
   return {
     products: [
-      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null, choices: demoChoices[i] ?? [] })),
+      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null, choices: demoChoices[i] ?? [], out_today: demoOut.includes(700 + i) })),
       ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: (['card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
     loyalty: { stamps: 4, max_per_sale: 4 },
     training: true,
     benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
+    top: [700, 703, 704, 701, 706, 708],
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
@@ -282,7 +284,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
 }
 // Barista tickets (API 1.17), demo only.
 const demoBar: BarTicket[] = [
-  { id: 5021, number: '5021', no: 7, state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش / فانيلا / كراميل لاتيه', qty: 2, drink: true, options: 'فانيلا · ثلج خفيف' }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
+  { id: 5021, number: '5021', no: 7, where: '🚗 لاندكروزر بيضاء', state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش / فانيلا / كراميل لاتيه', qty: 2, drink: true, options: 'فانيلا · ثلج خفيف' }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
   { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
   { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
@@ -369,6 +371,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
   if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); return x as T; }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
   if (path === '/pos/staff/add') {

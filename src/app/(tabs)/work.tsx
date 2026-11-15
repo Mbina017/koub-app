@@ -131,6 +131,7 @@ function Ticket({ x }: { x: BarTicket }) {
       {x.lines.map((l, i) => (
         <Row key={i} gap={10}><View style={st.qty}><Txt size={16} weight="bold" center>{l.qty}</Txt></View><View style={{ flex: 1 }}><Txt size={17} weight="medium">{l.name}</Txt>{l.options ? <Txt size={14} weight="semibold" tint={color.amber}>{l.options}</Txt> : null}</View>{l.drink === false && <Icon name="products" size={16} tint={color.faint} />}</Row>
       ))}
+      {x.where ? <View style={st.where}><Txt size={15} weight="semibold">{x.where}</Txt></View> : null}
       {x.note ? <Muted>{x.note}</Muted> : null}
       <Muted size={12}>{'#' + x.number}</Muted>
       {!done && (
@@ -185,6 +186,7 @@ function OrderCard({ o, label }: { o: OrderSummary; label?: string }) {
 const st = StyleSheet.create({
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   ready: { borderWidth: 2, borderColor: color.green },
+  where: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: color.amberBg },
   no: { minWidth: 40, height: 40, borderRadius: 12, paddingHorizontal: 8, backgroundColor: color.ink, justifyContent: 'center', marginEnd: 10 },
   qty: { minWidth: 34, height: 34, borderRadius: 10, backgroundColor: color.sunken, justifyContent: 'center', paddingHorizontal: 6 },
   shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: space.lg },
