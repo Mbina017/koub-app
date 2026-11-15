@@ -261,9 +261,9 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
 
-              {/* Drinks go to the barista screen under this name (API 1.17). */}
-              {!who && lines.some((l) => l.p.group === 'drinks') && (
-                <TextInput value={name} onChangeText={setName} placeholder={t('cupName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+              {/* Every sale waits on the hand-over list under this name (API 1.19); on the cup when it has drinks. */}
+              {!who && lines.length > 0 && (
+                <TextInput value={name} onChangeText={setName} placeholder={lines.some((l) => l.p.group === 'drinks') ? t('cupName') : t('handName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
               )}
               {loyaltyOn && (card ? (
                 <View style={[st.card, { gap: 8 }]}>
