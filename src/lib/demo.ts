@@ -280,6 +280,7 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
     lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty), options: [demoChoices[l.id - 700]?.find((c) => c.key === l.choice)?.label, l.note].filter(Boolean).join(' · ') })), discount, total, method, method_label: methodLabel(method, en),
     cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
     pay_ref: p.pay_ref ? String(p.pay_ref) : null,
+    track: 'https://koubbh.com/o/DEMO' + String(1e7 + posSales.length).slice(0, 8),
   };
   posSales.unshift(sale);
   return sale;
@@ -290,6 +291,7 @@ const demoBar: BarTicket[] = [
   { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
   { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
+demoBar.forEach((x) => x.lines.forEach((l, i) => { l.i = i; l.ready = false; }));
 // Till staff (API 1.15), demo only.
 let demoPin = false;
 const demoStaff: PosStaff[] = [
@@ -423,7 +425,15 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
   if (path === '/pos/close') return posCloseSave(p, p.lang === 'en') as T;
   if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
-  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); return x as T; }
+  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); if (x.state === 'waiting') x.lines.forEach((l) => (l.ready = false)); return x as T; }
+  if (/^\/bar\/\d+\/start$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() }; return x as T; }
+  if (/^\/bar\/\d+\/item$/.test(path)) {
+    const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found');
+    x.lines.forEach((l, i) => { if ((l.i ?? i) === Number(p.index)) l.ready = !!p.ready; });
+    if (!x.started) x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() };
+    if (x.lines.every((l) => l.ready) && x.state === 'waiting') x.state = 'ready'; else if (!x.lines.every((l) => l.ready) && x.state === 'ready') x.state = 'waiting';
+    return x as T;
+  }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
   if (path === '/pos/staff/add') {
     const s: PosStaff = { id: 900 + demoStaff.length, name: String(p.name ?? ''), login: 'till-' + (2000 + demoStaff.length), active: true, last_sale: null };
