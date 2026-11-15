@@ -76,6 +76,7 @@ function Gate() {
           <Stack.Screen name="unpaid" />
           <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="pos-today" />
+          <Stack.Screen name="pos-close" />
         </Stack.Protected>
         <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="pos-books" />

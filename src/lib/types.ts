@@ -258,7 +258,10 @@ export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; la
   // BenefitPay (API 1.21): what the shop's QR encodes, shown on the till for the customer to scan.
   benefit_qr?: string | null;
   // API 1.23: the best sellers of the last 7 days (product ids), for a quick shelf.
-  top?: number[] };
+  top?: number[];
+  // API 1.25: whether a sale needs the payment number (EazyPay approval code / BenefitPay transaction number).
+  pay_ref?: PayRefMode };
+export type PayRefMode = 'required' | 'optional' | 'off';
 // A barista ticket (API 1.17): the menu items of one till sale.
 export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready' | 'done'; at: string | null; since: string | null; name: string; whatsapp: string | null; note: string; lines: { name: string; qty: number; drink?: boolean; options?: string }[];
   // Today's order number (API 1.22): staff call the customer by it.
@@ -288,6 +291,8 @@ export type PosSaleInput = {
   // The scanned KOUB card: paid drinks become stamps; redeem uses a free drink waiting on it.
   loyalty?: string;
   loyalty_redeem?: boolean;
+  // API 1.25: the approval code on the EazyPay receipt, or the BenefitPay transaction number.
+  pay_ref?: string;
 };
 export type PosReceipt = {
   loyalty?: ReceiptLoyalty | null;
@@ -309,6 +314,21 @@ export type PosReceipt = {
   whatsapp: string | null;
   voidable: boolean;
   repeat?: boolean;
+  pay_ref?: string | null;
+};
+// End-of-day close (API 1.25).
+export type CloseMethod = 'card' | 'benefit';
+export type PosCloseInput = { date?: string; counted: Record<CloseMethod, number>; counts?: Partial<Record<CloseMethod, number>>; note?: string };
+export type PosCloseEntry = { at: string | null; by: string | null; counted: Record<CloseMethod, number>; counts: Partial<Record<CloseMethod, number | null>>; note: string;
+  expected: Record<CloseMethod, { count: number; total: number }>; diff: Record<CloseMethod, number>; ok: boolean; training?: boolean };
+export type PosCloseSale = { id: number; no: number | null; date: string | null; method: PosMethod; total: number; kept: number; pay_ref: string | null; dup_of: number | null; void: boolean; staff: string | null };
+export type PosCloseReport = {
+  date: string;
+  expected: { by_method: Record<CloseMethod, { count: number; total: number; missing_ref: number }>; total: number; void: { count: number; total: number }; refunds: number; dup_refs: number; sales: PosCloseSale[]; training: boolean };
+  closes: PosCloseEntry[];
+  // The last close against the sales as they are now (a sale cancelled after the close shows here).
+  diff_now: Record<CloseMethod, number> | null;
+  days: { date: string; closed: boolean; ok: boolean | null; diff: number | null; attempts: number }[];
 };
 export type PosToday = {
   // null for a cashier (API 1.19): staff see their sales only to cancel one, never how much they sold.
