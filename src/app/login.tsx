@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { ApiError, normalizeSite } from '../lib/api';
 import { useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
@@ -24,6 +25,8 @@ export default function Login() {
       await signIn({ site: normalizeSite(site), user: user.trim(), password: password.trim() });
     } catch (e) {
       const kind = e instanceof ApiError ? e.kind : 'network';
+      // A refusal from the store (waiting for approval, switched off, too many tries) says why in its own words.
+      if (e instanceof ApiError && e.kind === 'refused') return setError(e.message);
       setError(t(kind === 'auth' ? 'errAuth' : kind === 'forbidden' ? 'errForbidden' : kind === 'not_found' ? 'errNotFound' : 'errNetwork'));
     } finally {
       setBusy(null);
@@ -52,6 +55,7 @@ export default function Login() {
         ) : null}
 
         <Button label={t('signIn')} onPress={submit} loading={busy === 'in'} disabled={busy === 'demo'} />
+        <Button label={t('staffSignUp')} kind="light" icon="users" onPress={() => router.push({ pathname: '/register' as never, params: { site } } as never)} disabled={!!busy} style={{ marginTop: space.md }} />
         <Button label={t('tryDemo')} kind="ghost" onPress={async () => { setBusy('demo'); try { await signInDemo(); } finally { setBusy(null); } }} loading={busy === 'demo'} disabled={busy === 'in'} style={{ marginTop: space.md }} />
       </ScrollView>
     </KeyboardAvoidingView>

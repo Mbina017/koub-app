@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { useApiSession, useSession } from '../../lib/session';
@@ -13,7 +13,13 @@ import { SalesLine } from '../../components/Charts';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon, type IconName } from '../../components/Icon';
 
-export default function Home() {
+// A staff account (API 1.16) has no Home: its app opens on the order list.
+export default function HomeTab() {
+  const { cashier } = useSession();
+  return cashier ? <Redirect href={'/orders' as never} /> : <Home />;
+}
+
+function Home() {
   const session = useApiSession();
   const { t, lang, me } = useSession();
   const [period, setPeriod] = useState<HomePeriod>('today');

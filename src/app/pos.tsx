@@ -15,11 +15,13 @@ import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { confirmStep, showMessage } from '../lib/confirm';
-import type { PosMethod, PosProduct, PosReceipt } from '../lib/types';
+import type { LoyaltyCard, PosMethod, PosProduct, PosReceipt } from '../lib/types';
+import { LoyaltyScan } from '../components/LoyaltyScan';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
+// Rounds like the store's PHP round(): 0.30749999… (float error for 0.3075) goes up, so totals always agree.
+const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
 const newRef = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const parse = (s: string) => { const n = Number(s.replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; };
 const tick = (kind: 'light' | 'ok' | 'warn') => {
@@ -131,6 +133,7 @@ export default function Pos() {
         lines={lines}
         subtotal={subtotal}
         methods={q.data?.methods ?? []}
+        loyaltyOn={!!q.data?.loyalty}
         setQty={setQty}
         onClose={() => setOpen(false)}
         onDone={() => {
@@ -142,8 +145,8 @@ export default function Pos() {
   );
 }
 
-function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
-  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[];
+function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, onDone }: {
+  open: boolean; lines: { p: PosProduct; qty: number }[]; subtotal: number; methods: { key: PosMethod; label: string }[]; loyaltyOn: boolean;
   setQty: (p: PosProduct, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
@@ -152,6 +155,10 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   const [ref, setRef] = useState(newRef);
   // A cashier's discount goes through with the owner PIN, checked by the store (API 1.15).
   const [pin, setPin] = useState('');
+  // The scanned KOUB card: every paid drink is a stamp; a free drink waiting can be used on this sale.
+  const [card, setCard] = useState<{ card: LoyaltyCard; code: string } | null>(null);
+  const [useFree, setUseFree] = useState(false);
+  const [scan, setScan] = useState(false);
   const [method, setMethod] = useState<PosMethod>('cash');
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
@@ -165,8 +172,12 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dv = parse(disc);
-  const discount = r3(Math.min(subtotal, discType === 'percent' ? (subtotal * Math.min(100, dv)) / 100 : dv));
-  const total = r3(subtotal - discount);
+  // Like the store: the dearest drink is the free one, and the discount applies to what is left.
+  const drinkPrices = lines.filter((l) => l.p.stamp ?? l.p.group === 'drinks').map((l) => l.p.price);
+  const free = useFree && card && card.card.rewards > 0 && drinkPrices.length ? r3(Math.max(...drinkPrices)) : 0;
+  const base = r3(subtotal - free);
+  const discount = r3(Math.min(base, discType === 'percent' ? (base * Math.min(100, dv)) / 100 : dv));
+  const total = r3(base - discount);
   const cash = given.trim() ? parse(given) : null;
   const change = method === 'cash' && cash !== null ? r3(cash - total) : null;
   const short = change !== null && change < 0;
@@ -177,13 +188,14 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty })), method, discount: dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
       ...(needPin ? { owner_pin: pin.trim() } : {}),
+      ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
     onError: (e) => { tick('warn'); if (needPin) setPin(''); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
   });
 
   const reset = () => {
-    setRef(newRef()); setMethod('cash'); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setDone(null); sale.reset();
+    setRef(newRef()); setMethod('cash'); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -202,6 +214,9 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
               <View style={st.okDot}><Icon name="check" size={30} tint={color.bg} /></View>
               <Txt size={28} weight="bold">{money(done.total, lang)}</Txt>
               <Muted>{done.method_label}{done.repeat ? ' · ' + t('posAlreadySaved') : ''}</Muted>
+              {done.loyalty && !done.loyalty.failed && (
+                <Muted center>{[done.loyalty.redeemed ? t('loyUsed') : '', done.loyalty.added > 0 ? t('loyAdded', { n: done.loyalty.added, name: done.loyalty.name }) : '', done.loyalty.new_rewards > 0 ? t('loyNowFree', { name: done.loyalty.name }) : '', t('loyStamps', { s: done.loyalty.stamps, of: done.loyalty.of })].filter(Boolean).join(' · ')}</Muted>
+              )}
               {done.change !== null && done.change > 0 && (
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
@@ -233,6 +248,25 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
                 ))}
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
+
+              {loyaltyOn && (card ? (
+                <View style={[st.card, { gap: 8 }]}>
+                  <Row style={{ justifyContent: 'space-between' }}>
+                    <View style={{ flex: 1 }}>
+                      <Txt size={15} weight="semibold">{t('loyCard') + ' · ' + card.card.name}</Txt>
+                      <Muted size={12}>{[card.card.code, t('loyStamps', { s: card.card.stamps, of: card.card.of }), card.card.rewards > 0 ? t('loyFree', { n: card.card.rewards }) : ''].filter(Boolean).join(' · ')}</Muted>
+                    </View>
+                    <Touch onPress={() => { setCard(null); setUseFree(false); }} style={st.iconBtn} accessibilityLabel={t('loyRemove')}><Icon name="close" size={18} /></Touch>
+                  </Row>
+                  {card.card.rewards > 0 && (
+                    <Touch onPress={() => (drinkPrices.length ? setUseFree(!useFree) : showMessage(t('loyCard'), t('loyNeedDrink')))} style={[st.pill, { alignSelf: 'flex-start' }, useFree && { backgroundColor: color.ink }]}>
+                      <Txt size={13} weight="semibold" tint={useFree ? color.bg : color.ink}>{(useFree ? '✓ ' : '') + t('loyUseFree')}</Txt>
+                    </Touch>
+                  )}
+                </View>
+              ) : (
+                <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
+              ))}
 
               <Txt size={14} weight="semibold">{t('posDiscount')}</Txt>
               <Row gap={8}>
@@ -276,6 +310,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
               )}
             </ScrollView>
             <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
+              {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
               {discount > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('posDiscount')}</Muted><Muted>{'−' + money(discount, lang)}</Muted></Row>}
               <Row style={{ justifyContent: 'space-between' }}>
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
@@ -286,6 +321,7 @@ function Checkout({ open, lines, subtotal, methods, setQty, onClose, onDone }: {
           </>
         )}
       </KeyboardAvoidingView>
+      <LoyaltyScan open={scan} onClose={() => setScan(false)} onCard={(c, code) => { setCard({ card: c, code }); setUseFree(false); setScan(false); }} />
     </Modal>
   );
 }

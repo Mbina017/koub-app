@@ -51,7 +51,15 @@
           "icon": "./assets/notification-icon.png"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "KOUB uses the camera to scan KOUB loyalty cards at the till.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "scheme": "koub",
     "backgroundColor": "#F7F3EC",

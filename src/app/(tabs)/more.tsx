@@ -11,7 +11,7 @@ import type { LangPref } from '../../lib/session';
 import { Icon, type IconName } from '../../components/Icon';
 
 export default function More() {
-  const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush } = useSession();
+  const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush, cashier } = useSession();
   const [pushNote, setPushNote] = useState('');
   const [busy, setBusy] = useState(false);
   const changePush = async (p: typeof push) => {
@@ -49,6 +49,8 @@ export default function More() {
       />
       <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
 
+      {/* Alerts go to the owner's phones only (the store sends them to owners). */}
+      {!cashier && <>
       <SectionTitle title={t('alerts')} icon="bell" />
       <Card padded={false}>
         <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last={!push.on} />
@@ -57,14 +59,15 @@ export default function More() {
         {push.on && <Item icon="lock" label={t('quietNight')} sub={t('quietNightHint')} right={<Switch value={push.quiet} disabled={busy} onValueChange={(quiet) => changePush({ ...push, quiet })} trackColor={{ true: color.ink, false: color.line }} />} last />}
       </Card>
       {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+      </>}
 
       <SectionTitle title={t('pos')} icon="cash" />
       <Card padded={false}>
         <Item icon="cash" label={t('posOpen')} sub={t('posOpenHint')} onPress={() => router.push('/pos')} />
         <Item icon="users" label={t('newOrder')} sub={t('newOrderHint')} onPress={() => router.push('/order-new')} />
-        <Item icon="numbers" label={t('posToday')} onPress={() => router.push('/pos-today')} />
-        <Item icon="numbers" label={t('staffReport')} sub={t('staffReportHint')} onPress={() => router.push('/staff-report' as never)} />
-        <Item icon="users" label={t('staffTitle')} sub={t('staffHint')} onPress={() => router.push('/staff' as never)} last />
+        <Item icon="numbers" label={cashier ? t('myToday') : t('posToday')} onPress={() => router.push('/pos-today')} last={cashier} />
+        {!cashier && <Item icon="numbers" label={t('staffReport')} sub={t('staffReportHint')} onPress={() => router.push('/staff-report' as never)} />}
+        {!cashier && <Item icon="users" label={t('staffTitle')} sub={t('staffHint')} onPress={() => router.push('/staff' as never)} last />}
       </Card>
 
       <SectionTitle title={t('account')} />
@@ -75,11 +78,13 @@ export default function More() {
         <Item icon="logout" label={t('signOut')} danger last onPress={async () => { client.clear(); await signOut(); }} />
       </Card>
 
+      {!cashier && <>
       <SectionTitle title={t('comingNext')} />
       <Card padded={false}>
         <Item icon="truck" label={t('soonActions')} soon />
         <Item icon="edit" label={t('soonEdit')} soon last />
       </Card>
+      </>}
 
       <Muted size={12} center style={{ marginTop: space.xl }}>{'KOUB · ' + t('version', { v: Constants.expoConfig?.version ?? '1.0.0' })}</Muted>
     </Screen>

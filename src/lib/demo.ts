@@ -242,6 +242,7 @@ function posCatalog(en: boolean): PosCatalog {
       ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
+    loyalty: { stamps: 4, max_per_sale: 4 },
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
@@ -560,6 +561,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1 } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
   if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;

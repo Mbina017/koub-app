@@ -1,5 +1,5 @@
 import { StyleSheet, View, Pressable } from 'react-native';
-import { Redirect, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -17,19 +17,24 @@ const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products
   { name: 'more', icon: 'more', label: 'more' },
 ];
 
+const STAFF_TABS = ['orders', 'more'];
+
 // The five-tab bar from the dashboard, with the "to prepare" badge on Orders.
 function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { t } = useSession();
   const session = useApiSession();
   // Shares the Home query, refreshed every minute so the badge stays current.
-  const home = useQuery({ queryKey: ['home', 'today'], queryFn: () => api.home(session, 'today'), refetchInterval: 60_000 });
+  const { cashier } = useSession();
+  // Staff have no Home figures; their badge waits for a store that gives it to them.
+  const home = useQuery({ queryKey: ['home', 'today'], queryFn: () => api.home(session, 'today'), refetchInterval: 60_000, enabled: !cashier });
   const waiting = home.data?.needs.prepare.count ?? 0;
   return (
     <View style={[st.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       {state.routes.map((route, i) => {
         const tab = TABS.find((x) => x.name === route.name);
-        if (!tab) return null;
+        // Staff (API 1.16): orders and more; the till opens from both.
+        if (!tab || (cashier && !STAFF_TABS.includes(tab.name))) return null;
         const on = state.index === i;
         return (
           <Pressable
@@ -56,9 +61,6 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
-  // A cashier (API 1.15) has the till only: no orders, products, numbers or settings.
-  const { cashier } = useSession();
-  if (cashier) return <Redirect href={'/pos' as never} />;
   return (
     <Tabs tabBar={(p) => <TabBar {...p} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: color.bg } }}>
       {TABS.map((tab) => <Tabs.Screen key={tab.name} name={tab.name} />)}

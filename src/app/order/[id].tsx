@@ -22,7 +22,7 @@ import { ItemsEditor } from '../../components/ItemsEditor';
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const session = useApiSession();
-  const { t, lang } = useSession();
+  const { t, lang, cashier } = useSession();
   const insets = useSafeAreaInsets();
   const q = useQuery({ queryKey: ['order', id], queryFn: () => api.order(session, Number(id)) });
   const o = q.data;
@@ -75,7 +75,7 @@ export default function OrderScreen() {
               // A store still on API 1.0 has no actions: send the step to the dashboard.
               <>
                 <Muted size={12} style={{ marginBottom: 8 }}>{o.no_action ?? t('actionsOnDashboard')}</Muted>
-                {dash && <Button label={t('openInDashboard')} icon="external" kind="primary" onPress={() => WebBrowser.openBrowserAsync(dash)} />}
+                {dash && !cashier && <Button label={t('openInDashboard')} icon="external" kind="primary" onPress={() => WebBrowser.openBrowserAsync(dash)} />}
               </>
             )}
           </View>
@@ -451,7 +451,7 @@ function Action({ icon, label, onPress, disabled }: { icon: IconName; label: str
 
 function Items({ o }: { o: Order }) {
   const session = useApiSession();
-  const { t, lang } = useSession();
+  const { t, lang, cashier } = useSession();
   const [editing, setEditing] = useState(false);
   const update = useOrderUpdate(o.id);
   const refunded = useMutation({
@@ -490,8 +490,9 @@ function Items({ o }: { o: Order }) {
       {!!o.refund_owed && (
         <View style={[st.inset, { backgroundColor: color.blueBg, gap: 8 }]}>
           <Txt size={14} weight="semibold" tint={color.blue}>{t('refundOwed', { x: money(o.refund_owed, lang) })}</Txt>
-          <Button label={t('refundDone')} icon="check" kind="light" loading={refunded.isPending}
-            onPress={() => confirmStep({ label: t('refundDone'), confirm: t('refundDoneQ', { x: money(o.refund_owed!, lang) }), tone: 'primary' }, t('notNow'), () => refunded.mutate())} />
+          {/* Refunds are the owner's (API 1.16): staff see what is owed, never mark it done. */}
+          {!cashier && <Button label={t('refundDone')} icon="check" kind="light" loading={refunded.isPending}
+            onPress={() => confirmStep({ label: t('refundDone'), confirm: t('refundDoneQ', { x: money(o.refund_owed!, lang) }), tone: 'primary' }, t('notNow'), () => refunded.mutate())} />}
         </View>
       )}
       {o.items_edit && (

@@ -238,8 +238,13 @@ export type StaffOrder = {
 };
 export type StaffQuote = { subtotal: number; delivery: number | null; total: number | null };
 // group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
-export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; sku: string; price: number; stock: number | null; image: string | null };
-export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[] };
+// stamp: a drink that earns a KOUB card stamp and can be the free drink (API 1.16; before that, every menu item).
+export type PosProduct = { id: number; name: string; group?: 'drinks' | 'products'; stamp?: boolean; sku: string; price: number; stock: number | null; image: string | null };
+// loyalty: the KOUB card rules (API 1.11+), null when cards are off.
+export type PosCatalog = { products: PosProduct[]; methods: { key: PosMethod; label: string }[]; loyalty?: { stamps: number; max_per_sale: number } | null };
+// A KOUB loyalty card as the till sees it (scanned QR or typed code).
+export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number };
+export type ReceiptLoyalty = { code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number };
 export type PosSaleInput = {
   ref: string;
   lines: { id: number; qty: number }[];
@@ -253,8 +258,12 @@ export type PosSaleInput = {
   phone: string;
   // A cashier's discount needs the owner PIN (API 1.15).
   owner_pin?: string;
+  // The scanned KOUB card: paid drinks become stamps; redeem uses a free drink waiting on it.
+  loyalty?: string;
+  loyalty_redeem?: boolean;
 };
 export type PosReceipt = {
+  loyalty?: ReceiptLoyalty | null;
   id: number;
   number: string;
   status: string;
@@ -281,12 +290,12 @@ export type PosToday = {
 };
 
 // Till staff (API 1.15): cashier accounts the owner makes, and who sold what.
-export type PosStaff = { id: number; name: string; login: string; active: boolean; last_sale: string | null };
+export type PosStaff = { id: number; name: string; login: string; active: boolean; last_sale: string | null; pending?: boolean; phone?: string };
 export type PosStaffList = { pin_set: boolean; staff: PosStaff[] };
 // Returned once when an account is made, switched on again or given a new password.
 export type PosStaffSecret = { staff: PosStaff; login?: string; password?: string };
-export type PosStaffRow = { id: number; name: string; login?: string; free?: number; free_count?: number; count: number; total: number; by_method: Record<PosMethod, number>; discounts: number; discount_count: number; voids: number; void_total: number; refunds: number };
-export type PosStaffEvent = { id: number; number: string; date: string | null; staff: string; login?: string; total: number; kind: 'void' | 'discount' | 'free'; amount?: number; by?: string | null; approved: string };
+export type PosStaffRow = { id: number; name: string; login?: string; free?: number; free_count?: number; orders?: number; orders_total?: number; count: number; total: number; by_method: Record<PosMethod, number>; discounts: number; discount_count: number; voids: number; void_total: number; refunds: number };
+export type PosStaffEvent = { id: number; number: string; date: string | null; staff: string; login?: string; total: number; kind: 'void' | 'discount' | 'free' | 'order'; method?: string; amount?: number; by?: string | null; approved: string };
 export type PosStaffReport = { period: { preset: ShopPeriod; start: string; end: string; label: string }; staff: PosStaffRow[]; events: PosStaffEvent[] };
 
 // Shop books (API 1.7): the till's own sales, expenses and result, never mixed with the online store.
