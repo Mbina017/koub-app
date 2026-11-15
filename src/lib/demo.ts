@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -270,6 +270,27 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   posSales.unshift(sale);
   return sale;
 }
+// Till staff (API 1.15), demo only.
+let demoPin = false;
+const demoStaff: PosStaff[] = [
+  { id: 901, name: 'سارة', login: 'till-1201', active: true, last_sale: new Date(Date.now() - 40 * 60_000).toISOString() },
+  { id: 902, name: 'علي', login: 'till-1202', active: true, last_sale: null },
+];
+function staffReport(period: string): PosStaffReport {
+  const blank = (id: number, name: string): PosStaffRow => ({ id, name, count: 0, total: 0, by_method: { cash: 0, card: 0, benefit: 0 }, discounts: 0, discount_count: 0, voids: 0, void_total: 0, refunds: 0 });
+  const k = period === 'today' ? 1 : period === 'yesterday' ? 1.2 : period === '7days' ? 6 : 24;
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const sara = { ...blank(901, 'سارة'), count: Math.round(14 * k), total: r3(31.6 * k), by_method: { cash: r3(12.4 * k), card: r3(15.2 * k), benefit: r3(4 * k) }, discounts: 1.5, discount_count: 1, voids: 1, void_total: 2.2 };
+  const day = new Date().toISOString().slice(0, 10);
+  return {
+    period: { preset: period as ShopPeriod, start: day, end: day, label: day },
+    staff: [sara, ...demoStaff.filter((s) => s.id !== 901).map((s) => blank(s.id, s.name))],
+    events: [
+      { id: 5012, number: '5012', date: new Date(Date.now() - 50 * 60_000).toISOString(), staff: 'سارة', total: 2.2, kind: 'void', by: 'سارة', approved: 'pin' },
+      { id: 5009, number: '5009', date: new Date(Date.now() - 95 * 60_000).toISOString(), staff: 'سارة', total: 6.6, kind: 'discount', amount: 1.5, approved: 'pin' },
+    ],
+  };
+}
 function posToday(): PosToday {
   const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
   const live = posSales.filter((s) => s.status === 'completed');
@@ -332,6 +353,17 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
+  if (path === '/pos/staff/add') {
+    const s: PosStaff = { id: 900 + demoStaff.length, name: String(p.name ?? ''), login: 'till-' + (2000 + demoStaff.length), active: true, last_sale: null };
+    demoStaff.push(s); return { staff: s, login: s.login, password: 'demo abcd efgh ijkl' } as T;
+  }
+  if (/^\/pos\/staff\/\d+\/(password|active)$/.test(path)) {
+    const s = demoStaff.find((x) => x.id === Number(path.split('/')[3]));
+    if (!s) throw new Error('not found');
+    if (path.endsWith('/active')) s.active = !!p.active;
+    return (s.active ? { staff: s, login: s.login, password: 'demo mnop qrst uvwx' } : { staff: s }) as T;
+  }
   if (path === '/orders/quote' || path === '/orders/create') {
     // Demo only: store prices, Bahrain delivery free from 14 like the store; nothing is sent to anyone.
     const en = p.lang === 'en';
@@ -517,7 +549,7 @@ export async function demo<T>(path: string, p: Record<string, string | number | 
 
 async function demoAr<T>(path: string, p: Record<string, string | number | undefined>): Promise<T> {
   await new Promise((r) => setTimeout(r, 350));
-  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true };
+  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true, role: 'owner' };
   if (path === '/me') return me as T;
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
@@ -528,6 +560,8 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/catalog') return posCatalog(false) as T;
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
+  if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {

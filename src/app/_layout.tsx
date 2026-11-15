@@ -76,6 +76,8 @@ function Gate() {
           <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="pos-today" />
           <Stack.Screen name="pos-books" />
+          <Stack.Screen name="staff" />
+          <Stack.Screen name="staff-report" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

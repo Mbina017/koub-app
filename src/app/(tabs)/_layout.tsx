@@ -1,5 +1,5 @@
 import { StyleSheet, View, Pressable } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -56,6 +56,9 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+  // A cashier (API 1.15) has the till only: no orders, products, numbers or settings.
+  const { cashier } = useSession();
+  if (cashier) return <Redirect href={'/pos' as never} />;
   return (
     <Tabs tabBar={(p) => <TabBar {...p} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: color.bg } }}>
       {TABS.map((tab) => <Tabs.Screen key={tab.name} name={tab.name} />)}

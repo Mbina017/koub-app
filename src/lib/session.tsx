@@ -32,6 +32,8 @@ type Ctx = {
   ready: boolean;
   session: Session | null;
   me: Me | null;
+  // A cashier account (API 1.15): the till only.
+  cashier: boolean;
   lang: Lang;
   t: T;
   lock: boolean;
@@ -69,7 +71,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setSession(saved.session);
           setMe(saved.me);
           // Refresh name and language in the background; a failure keeps the saved copy.
-          api.me(saved.session).then(setMe).catch(() => {});
+          api.me(saved.session).then(setMe).catch(async (e) => {
+            // A cashier account the owner switched off (its password revoked): back to sign-in on this device.
+            if (saved.me?.role === 'cashier' && (e?.kind === 'auth' || e?.kind === 'forbidden')) {
+              await store.del(KEY); setSession(null); setMe(null);
+            }
+          });
         }
       } finally {
         setReady(true);
@@ -96,7 +103,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
     return {
       push, savePush,
-      ready, session, me, lang, t: translator(lang), lock, langPref,
+      ready, session, me, cashier: me?.role === 'cashier', lang, t: translator(lang), lock, langPref,
       // The caller refetches its data so labels from the store switch too.
       setLangPref: async (p) => {
         await store.set(LANG, p); setApiLang(p === 'auto' ? undefined : p); setPref(p);
