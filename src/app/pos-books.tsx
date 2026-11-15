@@ -93,7 +93,7 @@ function Body({ d, adding, setAdding }: { d: ShopBooks; adding: boolean; setAddi
 
       <View style={[st.card, { gap: 8 }]}>
         <Muted size={13}>{t('booksByMethod')}</Muted>
-        {(['cash', 'card', 'benefit'] as PosMethod[]).map((m) => <Line key={m} label={label[m]} value={money(d.by_method[m] ?? 0, lang)} />)}
+        {(['cash', 'card', 'benefit'] as PosMethod[]).filter((m) => m !== 'cash' || (d.by_method?.cash ?? 0) > 0).map((m) => <Line key={m} label={label[m]} value={money(d.by_method[m] ?? 0, lang)} />)}
       </View>
 
       {/* Expenses */}
