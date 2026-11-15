@@ -14,7 +14,7 @@ import { color, font, radius, space } from '../lib/theme';
 import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
-import { confirmStep, showMessage } from '../lib/confirm';
+import { showMessage } from '../lib/confirm';
 import type { LoyaltyCard, PosMethod, PosProduct, PosReceipt } from '../lib/types';
 import { LoyaltyScan } from '../components/LoyaltyScan';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
@@ -32,7 +32,7 @@ const tick = (kind: 'light' | 'ok' | 'warn') => {
 
 export default function Pos() {
   const session = useApiSession();
-  const { t, lang, cashier, me, signOut } = useSession();
+  const { t, lang, cashier, me } = useSession();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['pos-catalog'], queryFn: () => api.posCatalog(session) });
@@ -65,9 +65,9 @@ export default function Pos() {
     <View style={{ flex: 1, backgroundColor: color.bg }}>
       <Row style={[st.top, { paddingTop: insets.top + 6 }]}>
         {cashier ? (
-          // A cashier's app is the till: signing out is the only way off it.
-          <Touch onPress={() => confirmStep({ label: t('signOut'), confirm: t('signOut') + '?', tone: 'danger' }, t('notNow'), () => { qc.clear(); signOut(); })} style={st.iconBtn} accessibilityLabel={t('signOut')}>
-            <Icon name="logout" size={22} />
+          // Staff open on the till; closing it shows their tabs (Work, Orders, More, where they sign out).
+          <Touch onPress={() => router.replace('/work' as never)} style={st.iconBtn} accessibilityLabel={t('posExit')}>
+            <Icon name="close" size={22} />
           </Touch>
         ) : (
           <Touch onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={st.iconBtn} accessibilityLabel={t('posExit')}>
