@@ -83,6 +83,8 @@ function Gate() {
           <Stack.Screen name="team" />
           <Stack.Screen name="team-report" />
           <Stack.Screen name="pos-golive" />
+          <Stack.Screen name="pos-stock" />
+          <Stack.Screen name="pos-insights" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />
