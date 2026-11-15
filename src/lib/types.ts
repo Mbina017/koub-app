@@ -273,6 +273,8 @@ export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready'
   pickup?: string | null;
   // API 1.31: the customer pressed "I'm here" (or ordered from the parking QR): in the car outside, and where.
   arrived?: { at: string | null; spot: string } | null;
+  // API 1.32: ordered ahead for later: not to be made before this time (so it is fresh at pickup).
+  fire_at?: string | null;
   // Today's order number (API 1.22): staff call the customer by it.
   no?: number | null;
   // API 1.23: where to hand it over (in the shop, or the car).
