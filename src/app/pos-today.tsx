@@ -62,7 +62,7 @@ export default function PosToday() {
                 <Muted>{t('posSalesN', { n: d.count ?? 0 })}</Muted>
                 <Txt size={24} weight="bold">{money(d.total, lang)}</Txt>
               </Row>
-              {(['cash', 'card', 'benefit'] as PosMethod[]).map((m) => (
+              {(['cash', 'card', 'benefit'] as PosMethod[]).filter((m) => m !== 'cash' || (d.by_method?.cash ?? 0) > 0).map((m) => (
                 <Row key={m} style={{ justifyContent: 'space-between' }}>
                   <Txt size={15}>{label[m]}</Txt>
                   <Txt size={15} weight="semibold">{money(d.by_method?.[m] ?? 0, lang)}</Txt>

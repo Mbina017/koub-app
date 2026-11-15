@@ -1,4 +1,4 @@
-// Shop till: tap items to build a sale, take cash, card or BenefitPay, and hand over a receipt.
+// Shop till: tap items to build a sale, take card or BenefitPay (no cash since API 1.21), and hand over a receipt.
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
 import { useEffect, useMemo, useState } from 'react';
@@ -196,7 +196,10 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
   const [card, setCard] = useState<{ card: LoyaltyCard; code: string } | null>(null);
   const [useFree, setUseFree] = useState(false);
   const [scan, setScan] = useState(false);
-  const [method, setMethod] = useState<PosMethod>('cash');
+  // The store says which methods it takes (API 1.21: card machine and BenefitPay); the first is the default.
+  const first = (methods[0]?.key ?? 'card') as PosMethod;
+  const [method, setMethod] = useState<PosMethod>(first);
+  useEffect(() => { if (methods.length && !methods.some((m) => m.key === method)) setMethod(first); }, [methods, method, first]);
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
   const [given, setGiven] = useState('');
@@ -232,7 +235,7 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
   });
 
   const reset = () => {
-    setRef(newRef()); setMethod('cash'); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -323,7 +326,7 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
               )}
 
               <Txt size={14} weight="semibold">{t('posMethod')}</Txt>
-              <Segmented<PosMethod> items={(methods.length ? methods : [{ key: 'cash' as PosMethod, label: t('posCash') }]).map((m) => [m.key, m.label])} value={method} onChange={setMethod} />
+              <Segmented<PosMethod> items={(methods.length ? methods : [{ key: 'card' as PosMethod, label: t('posCard') }]).map((m) => [m.key, m.label])} value={method} onChange={setMethod} />
 
               {method === 'cash' && (
                 <>

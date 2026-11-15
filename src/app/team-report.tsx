@@ -69,7 +69,7 @@ function Person({ p }: { p: PosStaffRow }) {
         </View>
         <Txt size={20} weight="bold">{money(p.total, lang)}</Txt>
       </Row>
-      {(['cash', 'card', 'benefit'] as PosMethod[]).map((m) => (
+      {(['cash', 'card', 'benefit'] as PosMethod[]).filter((m) => m !== 'cash' || (p.by_method?.cash ?? 0) > 0).map((m) => (
         <Row key={m} style={{ justifyContent: 'space-between' }}><Muted>{label[m]}</Muted><Txt size={14}>{money(p.by_method[m] ?? 0, lang)}</Txt></Row>
       ))}
       {(p.discount_count > 0 || p.voids > 0 || p.refunds > 0 || (p.free_count ?? 0) > 0 || (p.orders ?? 0) > 0) && (
