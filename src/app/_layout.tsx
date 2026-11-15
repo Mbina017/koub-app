@@ -79,8 +79,8 @@ function Gate() {
         </Stack.Protected>
         <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="pos-books" />
-          <Stack.Screen name="staff" />
-          <Stack.Screen name="staff-report" />
+          <Stack.Screen name="team" />
+          <Stack.Screen name="team-report" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

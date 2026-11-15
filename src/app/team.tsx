@@ -1,4 +1,5 @@
 // Till staff accounts (API 1.15), owner only: one till-only sign-in per person, switched off at once when needed,
+// Route is /team, not /staff...: the web version is served at /staff, and the router there strips that prefix.
 // and the owner PIN that a cashier needs for a discount or to cancel a sale.
 // A password is shown once, when the account is made, switched on again or given a new one.
 import { useState } from 'react';
