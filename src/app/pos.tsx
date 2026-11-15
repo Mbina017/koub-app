@@ -107,6 +107,12 @@ export default function Pos() {
           </Touch>
         )}
       </Row>
+      {q.data?.training ? (
+        <Row gap={8} style={st.training}>
+          <Icon name="warn" size={18} tint={color.bg} />
+          <Txt size={13} weight="semibold" tint={color.bg} style={{ flex: 1 }}>{t('posTraining')}</Txt>
+        </Row>
+      ) : null}
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
         <Row style={st.search}>
           <Icon name="search" size={18} tint={color.faint} />
@@ -370,6 +376,7 @@ const st = StyleSheet.create({
   tileOn: { borderColor: color.ink },
   thumb: { height: 96, borderRadius: radius.md, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   badge: { position: 'absolute', top: 8, end: 8, minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 6, backgroundColor: color.ink, justifyContent: 'center' },
+  training: { backgroundColor: color.amber, paddingHorizontal: space.lg, paddingVertical: 10 },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   sep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
