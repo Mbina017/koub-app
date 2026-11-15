@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { api, setApiLang, type Credentials, type Session } from './api';
+import { api, ApiError, setApiLang, staffSignIn, type Credentials, type Session } from './api';
 import { PUSH_DEFAULT, setPush, type PushPrefs, type PushResult } from './push';
 import { translator, type T } from './i18n';
 import type { Lang, Me } from './types';
@@ -110,7 +110,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Alerts follow the app language too.
         if (session && push.on) setPush(session, push, p === 'auto' ? me?.lang ?? 'ar' : p).catch(() => {});
       },
-      signIn: (c) => begin(c),
+      // An application password signs in as it is. Anything else may be a staff member's own password (API 1.16):
+      // the store swaps it for an application password for this phone. A store without that keeps the first error.
+      signIn: async (c) => {
+        try { await begin(c); } catch (e) {
+          if (!(e instanceof ApiError) || e.kind !== 'auth') throw e;
+          let swapped: { user: string; password: string };
+          try { swapped = await staffSignIn(c.site, c.user, c.password); } catch (e2) {
+            if (e2 instanceof ApiError && (e2.kind === 'refused' || e2.kind === 'network')) throw e2;
+            throw e;
+          }
+          await begin({ site: c.site, user: swapped.user, password: swapped.password });
+        }
+      },
       signInDemo: () => begin({ demo: true }),
       signOut: async () => {
         // Stop alerts to this phone before forgetting the store.

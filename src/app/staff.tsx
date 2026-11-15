@@ -40,7 +40,11 @@ export default function Staff() {
     onSuccess: () => { setPin(''); setPinOpen(false); qc.invalidateQueries({ queryKey: ['pos-staff'] }); showMessage(t('ownerPin'), t('ownerPinSaved')); },
     onError: fail,
   });
-  const busy = add.isPending || newPw.isPending || active.isPending;
+  // Sign-up requests (API 1.16): approve and the account starts working; turn down and it is removed.
+  const approve = useMutation({ mutationFn: (v: { id: number; ok: boolean }) => api.posStaffApprove(session, v.id, v.ok), onSuccess: () => { qc.invalidateQueries({ queryKey: ['pos-staff'] }); qc.invalidateQueries({ queryKey: ['staff-report'] }); }, onError: fail });
+  const busy = add.isPending || newPw.isPending || active.isPending || approve.isPending;
+  const pending = q.data?.staff.filter((s) => s.pending) ?? [];
+  const staff = q.data?.staff.filter((s) => !s.pending) ?? [];
   const input = [st.input, { textAlign: (lang === 'ar' ? 'right' : 'left') as 'right' | 'left', fontFamily: font.regular }];
 
   return (
@@ -80,13 +84,36 @@ export default function Staff() {
               )}
             </View>
 
+            {pending.length > 0 && (
+              <View style={[st.card, { gap: 10, borderWidth: 1.5, borderColor: color.amber }]}>
+                <Txt size={16} weight="semibold">{t('staffPending')}</Txt>
+                {pending.map((s) => (
+                  <View key={s.id} style={{ gap: 6 }}>
+                    <Row style={{ justifyContent: 'space-between' }}>
+                      <View style={{ flex: 1 }}>
+                        <Txt size={15} weight="semibold">{s.name}</Txt>
+                        <Muted size={12} ltr>{[s.login, s.phone ? '+' + s.phone : ''].filter(Boolean).join(' · ')}</Muted>
+                      </View>
+                      <TagChip label={t('staffPendingTag')} tone="amber" small />
+                    </Row>
+                    <Row gap={8}>
+                      <Touch onPress={() => approve.mutate({ id: s.id, ok: true })} disabled={busy} style={[st.pill, { backgroundColor: color.ink }]}><Txt size={13} weight="semibold" tint={color.bg}>{t('staffApprove')}</Txt></Touch>
+                      <Touch onPress={() => confirmStep({ label: t('staffReject'), confirm: t('staffRejectConfirm', { n: s.name }), tone: 'danger' }, t('notNow'), () => approve.mutate({ id: s.id, ok: false }))} disabled={busy} style={[st.pill, { backgroundColor: color.redBg }]}>
+                        <Txt size={13} weight="semibold" tint={color.red}>{t('staffReject')}</Txt>
+                      </Touch>
+                    </Row>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={[st.card, { gap: 8 }]}>
               <Txt size={16} weight="semibold">{t('staffAdd')}</Txt>
               <TextInput value={name} onChangeText={setName} placeholder={t('staffName')} placeholderTextColor={color.faint} maxLength={60} style={input} />
               <Button label={t('staffCreate')} icon="plus" loading={add.isPending} disabled={!name.trim() || busy} onPress={() => add.mutate()} />
             </View>
 
-            {q.data.staff.length === 0 ? <Empty title={t('staffNone')} icon="users" /> : q.data.staff.map((s) => (
+            {staff.length === 0 ? <Empty title={t('staffNone')} icon="users" /> : staff.map((s) => (
               <StaffCard key={s.id} s={s} busy={busy}
                 onPassword={() => confirmStep({ label: t('staffNewPassword'), confirm: t('staffNewPwConfirm', { n: s.name }), tone: 'default' }, t('notNow'), () => newPw.mutate(s.id))}
                 onToggle={() => (s.active

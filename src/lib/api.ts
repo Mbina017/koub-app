@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, LoyaltyCard, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -134,6 +134,9 @@ export const api = {
   posStaffPassword: (s: Session, id: number) => post<PosStaffSecret>(s, '/pos/staff/' + id + '/password', { lang: appLang }),
   posStaffActive: (s: Session, id: number, active: boolean) => post<PosStaffSecret>(s, '/pos/staff/' + id + '/active', { active, lang: appLang }),
   posOwnerPin: (s: Session, pin: string) => post<{ pin_set: boolean }>(s, '/pos/owner-pin', { pin, lang: appLang }),
+  posStaffApprove: (s: Session, id: number, approve: boolean) => post<PosStaffSecret | { removed: true }>(s, '/pos/staff/' + id + '/approve', { approve, lang: appLang }),
+  // A KOUB card by the code in its QR ("KOUB" + 8 characters) or typed from the card.
+  loyaltyCard: (s: Session, code: string) => get<LoyaltyCard>(s, '/loyalty/card', { code }),
   posStaffReport: (s: Session, period: ShopPeriod) => get<PosStaffReport>(s, '/pos/staff-report', { period }),
   // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),
@@ -145,6 +148,24 @@ export const api = {
   // A fresh link (the old one stops working): `send` has the store message it; otherwise staff send it themselves.
   staffResendLink: (s: Session, id: number, send = true) => post<StaffOrder>(s, '/orders/' + id + '/address-link', { send, lang: appLang }),
 };
+
+// Sign-up and sign-in before there is a session (API 1.16): open routes on the store, no Authorization header.
+async function open<T>(site: string, path: string, body: Record<string, unknown>): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(site + '/wp-json/koub/v1/app' + path, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, lang: appLang }) });
+  } catch {
+    throw new ApiError('network');
+  }
+  const data = await res.json().catch(() => null);
+  if (res.ok) return data as T;
+  if (res.status === 404 && data?.code === 'rest_no_route') throw new ApiError('not_found', 'no_route', 404);
+  if (res.status === 401) throw new ApiError('auth', 'auth', 401);
+  throw new ApiError('refused', data?.message ?? 'HTTP ' + res.status, res.status);
+}
+// A staff member's username and password, swapped by the store for an application password for this phone.
+export const staffSignIn = (site: string, username: string, password: string) => open<{ user: string; password: string }>(site, '/login', { username, password });
+export const staffSignUp = (site: string, p: { name: string; phone: string; username: string; password: string }) => open<{ pending: true }>(site, '/register', p);
 
 // The dashboard order screen, for stores without the order actions API and for refunds.
 export function dashboardOrderUrl(session: Session, id: number): string | null {

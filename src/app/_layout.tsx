@@ -41,7 +41,7 @@ function useAlerts(signedIn: boolean) {
     // Open each tapped alert once, after sign-in and unlock.
     if (!signedIn || !target || handled.current === key) return;
     handled.current = key;
-    router.push(target);
+    router.push(target as never);
   }, [last, signedIn]);
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -67,23 +67,24 @@ function Gate() {
   return (
     <View style={{ flex: 1, backgroundColor: color.bg, direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: 'slide_from_right' }}>
-        {/* A cashier (API 1.15) gets the till and their own sales only; a link to any other screen goes nowhere. */}
+        {/* Staff (API 1.16): the till, orders, new orders, the run and unpaid follow-ups. The rest is the owner's. */}
         <Stack.Protected guard={!!session}>
-          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="pos-today" />
-        </Stack.Protected>
-        <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="order/[id]" />
           <Stack.Screen name="preorders" />
           <Stack.Screen name="run" />
           <Stack.Screen name="unpaid" />
+          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="pos-today" />
+        </Stack.Protected>
+        <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="pos-books" />
           <Stack.Screen name="staff" />
           <Stack.Screen name="staff-report" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
         </Stack.Protected>
       </Stack>
     </View>
