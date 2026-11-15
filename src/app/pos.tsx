@@ -289,14 +289,16 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   // The store says which methods it takes (API 1.21: card machine and BenefitPay); the first is the default.
   const first = (methods[0]?.key ?? 'card') as PosMethod;
   const [method, setMethod] = useState<PosMethod>(first);
-  useEffect(() => { if (methods.length && !methods.some((m) => m.key === method)) setMethod(first); }, [methods, method, first]);
+  // KOUB credit (API 1.34) is offered only once a card with credit switched on is scanned.
+  const shown = methods.filter((m) => m.key !== 'credit' || (card && card.card.credit != null));
+  useEffect(() => { if (shown.length && !shown.some((m) => m.key === method)) setMethod(first); }, [shown, method, first]);
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
   // The payment number (API 1.25): the approval code on the EazyPay receipt, or the BenefitPay transaction number.
   const [payRef, setPayRef] = useState('');
   useEffect(() => { setPayRef(''); }, [method]);
   const payRefClean = cleanPayRef(payRef);
-  const askRef = payRefMode !== 'off' && method !== 'cash';
+  const askRef = payRefMode !== 'off' && method !== 'cash' && method !== 'credit';
   const refMissing = askRef && (payRefMode === 'required' ? payRefClean.length < 4 : payRefClean.length > 0 && payRefClean.length < 4);
   const [given, setGiven] = useState('');
   const [who, setWho] = useState(false);
@@ -321,6 +323,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const change = method === 'cash' && cash !== null ? r3(cash - total) : null;
   const short = change !== null && change < 0;
   const needPin = cashier && discount > 0;
+  const creditLeft = card?.card.credit ?? 0;
+  const creditShort = method === 'credit' && creditLeft < total - 0.0005;
 
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
@@ -363,6 +367,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               {done.loyalty && !done.loyalty.failed && (
                 <Muted center>{[done.loyalty.redeemed ? t('loyUsed') : '', done.loyalty.added > 0 ? t('loyAdded', { n: done.loyalty.added, name: done.loyalty.name }) : '', done.loyalty.new_rewards > 0 ? t('loyNowFree', { name: done.loyalty.name }) : '', t('loyStamps', { s: done.loyalty.stamps, of: done.loyalty.of })].filter(Boolean).join(' · ')}</Muted>
               )}
+              {done.method === 'credit' && done.loyalty?.credit != null && <Muted center>{t('creditLeft', { x: money(done.loyalty.credit, lang) })}</Muted>}
               {done.change !== null && done.change > 0 && (
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
@@ -433,7 +438,12 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               )}
 
               <Txt size={14} weight="semibold">{t('posMethod')}</Txt>
-              <Segmented<PosMethod> items={(methods.length ? methods : [{ key: 'card' as PosMethod, label: t('posCard') }]).map((m) => [m.key, m.label])} value={method} onChange={setMethod} />
+              <Segmented<PosMethod> items={(shown.length ? shown : [{ key: 'card' as PosMethod, label: t('posCard') }]).map((m) => [m.key, m.label])} value={method} onChange={setMethod} />
+              {method === 'credit' && (
+                <View style={[st.card, { gap: 4 }]}>
+                  <Txt size={15} weight="semibold" tint={creditShort ? color.red : color.ink}>{creditShort ? t('creditShort', { x: money(creditLeft, lang) }) : t('creditAfter', { x: money(creditLeft, lang), y: money(r3(creditLeft - total), lang) })}</Txt>
+                </View>
+              )}
               {method === 'benefit' && benefitQr ? (
                 // The customer scans the shop's BenefitPay QR and pays the total; staff complete the sale once it shows as paid.
                 <View style={[st.card, { alignItems: 'center', gap: 8 }]}>
@@ -485,7 +495,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || sale.isPending || (needPin && pin.trim().length < 4) || refMissing} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || (needPin && pin.trim().length < 4) || refMissing} onPress={() => sale.mutate()} />
             </View>
           </>
         )}

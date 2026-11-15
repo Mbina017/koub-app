@@ -63,7 +63,7 @@ function Body({ d, adding, setAdding }: { d: ShopBooks; adding: boolean; setAddi
   const session = useApiSession();
   const { t, lang } = useSession();
   const qc = useQueryClient();
-  const label: Record<PosMethod, string> = { cash: t('posCash'), card: t('posCard'), benefit: t('posBenefit') };
+  const label: Record<PosMethod, string> = { cash: t('posCash'), card: t('posCard'), benefit: t('posBenefit'), credit: t('posCredit') };
   const refresh = () => { for (const k of ['pos-books', 'home']) qc.invalidateQueries({ queryKey: [k] }); };
   const remove = useMutation({
     mutationFn: (e: { date: string; id: string }) => api.posExpenseRemove(session, e.date, e.id),

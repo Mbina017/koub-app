@@ -42,7 +42,7 @@ export default function PosToday() {
   const refClean = refRef.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const canCancel = !!reason && !!money2 && (money2 !== 'done' || refClean.length >= 4) && (!cashier || pin.length >= 4);
   const d = q.data;
-  const label: Record<PosMethod, string> = { cash: t('posCash'), card: t('posCard'), benefit: t('posBenefit') };
+  const label: Record<PosMethod, string> = { cash: t('posCash'), card: t('posCard'), benefit: t('posBenefit'), credit: t('posCredit') };
 
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>

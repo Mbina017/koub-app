@@ -59,7 +59,7 @@ export default function StaffReport() {
 
 function Person({ p }: { p: PosStaffRow }) {
   const { t, lang } = useSession();
-  const label: Record<PosMethod, string> = { cash: t('posCash'), card: t('posCard'), benefit: t('posBenefit') };
+  const label: Record<PosMethod, string> = { cash: t('posCash'), card: t('posCard'), benefit: t('posBenefit'), credit: t('posCredit') };
   return (
     <View style={[st.card, { gap: 8 }]}>
       <Row style={{ justifyContent: 'space-between' }}>

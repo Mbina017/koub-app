@@ -225,7 +225,8 @@ export type UnpaidList = { count: number; value: number; rows: UnpaidRow[] };
 export type PaymentLink = { url: string; text: string; whatsapp: string | null };
 
 // Shop till (API 1.5).
-export type PosMethod = 'cash' | 'card' | 'benefit';
+// 'credit' (API 1.34): KOUB credit on the scanned card.
+export type PosMethod = 'cash' | 'card' | 'benefit' | 'credit';
 // An order staff place for a customer (API 1.8): paid, and for delivery the customer adds the address from a WhatsApp link.
 export type StaffMethod = 'cash' | 'card' | 'benefit' | 'transfer';
 export type StaffOrderInput = {
@@ -281,8 +282,8 @@ export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready'
   where?: string };
 export type BarList = { tickets: BarTicket[]; waiting: number };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
-export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number };
-export type ReceiptLoyalty = { code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number };
+export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number; credit?: number | null };
+export type ReceiptLoyalty = { credit?: number | null; code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number };
 export type PosSaleInput = {
   ref: string;
   // choice / note (API 1.22): the drink picked for a combined item, and a short note for the barista.
@@ -337,6 +338,8 @@ export type PosCancelInput = { owner_pin?: string; reason: CancelReason; reason_
 export type RefundOwed = { id: number; no: number | null; number: string; date: string | null; amount: number; method: PosMethod; pay_ref: string | null; name: string; whatsapp: string | null; training: boolean };
 // Order ahead (API 1.29), owner only: koubbh.com/order.
 // API 1.33: KOUB card offers (owner).
+// API 1.34: KOUB credit (owner): switch, packs [pay, get], and what is on cards / sold this month.
+export type CreditSettings = { on: boolean; packs: [number, number][]; outstanding: number; cards: number; month_paid: number; month_credit: number };
 export type LoyaltyOffers = { birthday: boolean; comeback: boolean; birthdays: number; comeback_days: number };
 export type AheadSettings = { on: boolean; from: string; to: string; cap: number; lead: number; slots: { t: number; label: string; free: number }[]; url: string };
 // Ingredient stock (API 1.28), owner only.
