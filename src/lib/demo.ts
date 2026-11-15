@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
+import type { ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -233,13 +233,13 @@ function actions(o: DemoOrder): OrderAction[] {
 
 // ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
 const posSales: PosReceipt[] = [];
-const menuDrinks: [string, number][] = [['سبانش لاتيه', 2.2], ['آيس لاتيه', 2.1], ['أمريكانو', 1.5], ['كرك', 0.8]];
+const menuDrinks: [string, number, PosShelf, 'hot' | 'cold' | null][] = [['آيس سبانش العقيلي', 2.5, 'coffee', 'cold'], ['أمريكانو', 1.5, 'coffee', 'hot'], ['كورتادو', 1.6, 'coffee', 'hot'], ['فلات وايت / لاتيه / كابتشينو', 1.8, 'coffee', 'hot'], ['سبانش / فانيلا / كراميل لاتيه', 2.1, 'coffee', 'cold'], ['كولد برو', 2.2, 'coffee', 'cold'], ['كرك', 0.8, 'tea', 'hot'], ['ماتشا', 2.2, 'tea', 'cold'], ['كيكة الرفاع', 1.8, 'sweets', null], ['تيراميسو', 2, 'sweets', null]];
 const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
 function posCatalog(en: boolean): PosCatalog {
   return {
     products: [
-      ...menuDrinks.map(([name, price], i) => ({ id: 700 + i, name, group: 'drinks' as const, sku: 'MENU-' + i, price, stock: null, image: null })),
-      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null })),
+      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: (['cash', 'card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
     loyalty: { stamps: 4, max_per_sale: 4 },
@@ -273,9 +273,9 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
 }
 // Barista tickets (API 1.17), demo only.
 const demoBar: BarTicket[] = [
-  { id: 5021, number: '5021', state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش لاتيه', qty: 2 }, { name: 'كيكة الرفاع', qty: 1 }] },
-  { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1 }] },
-  { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1 }] },
+  { id: 5021, number: '5021', state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش لاتيه', qty: 2, drink: true }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
+  { id: 5022, number: '5022', state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
+  { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
 ];
 // Till staff (API 1.15), demo only.
 let demoPin = false;
@@ -360,7 +360,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
   if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
-  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; return x as T; }
+  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); return x as T; }
   if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
   if (path === '/pos/staff/add') {
     const s: PosStaff = { id: 900 + demoStaff.length, name: String(p.name ?? ''), login: 'till-' + (2000 + demoStaff.length), active: true, last_sale: null };
@@ -570,7 +570,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/today') return posToday() as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
-  if (path === '/bar') return { tickets: demoBar.filter((x) => x.state !== 'done'), waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
+  if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
   if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1 } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
   if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;

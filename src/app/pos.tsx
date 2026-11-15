@@ -15,7 +15,7 @@ import { money } from '../lib/format';
 import { sharePdf } from '../lib/print';
 import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
-import type { LoyaltyCard, PosMethod, PosProduct, PosReceipt } from '../lib/types';
+import type { LoyaltyCard, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
 import { LoyaltyScan } from '../components/LoyaltyScan';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
@@ -36,8 +36,13 @@ export default function Pos() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['pos-catalog'], queryFn: () => api.posCatalog(session) });
+  // What is still to be handed to customers (API 1.19: every sale), one tap away from the till.
+  const bar = useQuery({ queryKey: ['bar'], queryFn: () => api.bar(session), refetchInterval: 15_000, retry: false });
+  const toHand = bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<'all' | 'drinks' | 'products'>('all');
+  const [shelf, setShelf] = useState<PosShelf>('coffee');
+  const [temp, setTemp] = useState<'hot' | 'cold'>('hot');
   const [cart, setCart] = useState<Record<number, number>>({});
   const [open, setOpen] = useState(false);
   // More tiles across on a tablet.
@@ -49,7 +54,17 @@ export default function Pos() {
   const hasDrinks = products.some((p) => p.group === 'drinks');
   // The menu was emptied since: back to everything rather than an empty tab.
   useEffect(() => { if (!hasDrinks && group !== 'all') setGroup('all'); }, [hasDrinks, group]);
-  const shown = products.filter((p) => (group === 'all' || p.group === group) && (!search.trim() || (p.name + ' ' + p.sku).toLowerCase().includes(search.trim().toLowerCase())));
+  // Shelves (API 1.19): coffee (hot / cold), tea, sweets, goods. Only the shelves that have something show.
+  const shelves = (['coffee', 'tea', 'sweets', 'goods'] as PosShelf[]).filter((k) => products.some((p) => p.shelf === k));
+  const useShelves = shelves.length > 1;
+  const temps = (['hot', 'cold'] as const).filter((k) => products.some((p) => p.shelf === 'coffee' && p.temp === k));
+  useEffect(() => { if (useShelves && !shelves.includes(shelf)) setShelf(shelves[0]); }, [useShelves, shelves, shelf]);
+  useEffect(() => { if (temps.length && !temps.includes(temp)) setTemp(temps[0]); }, [temps, temp]);
+  const query = search.trim().toLowerCase();
+  // A search looks through everything.
+  const shown = products.filter((p) => query ? (p.name + ' ' + p.sku).toLowerCase().includes(query)
+    : useShelves ? p.shelf === shelf && (shelf !== 'coffee' || temps.length < 2 || p.temp === temp)
+    : group === 'all' || p.group === group);
   const lines = Object.entries(cart).map(([id, qty]) => ({ p: byId.get(Number(id)), qty })).filter((l): l is { p: PosProduct; qty: number } => !!l.p && l.qty > 0);
   const count = lines.reduce((s, l) => s + l.qty, 0);
   const subtotal = r3(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
@@ -78,8 +93,13 @@ export default function Pos() {
           <Txt size={19} weight="bold">{t('pos')}</Txt>
           {cashier && me?.name ? <Muted size={12} lines={1}>{t('posSignedIn', { n: me.name })}</Muted> : null}
         </View>
+        {toHand > 0 && (
+          <Touch onPress={() => router.push('/work' as never)} style={[st.pill, { backgroundColor: color.ink }]}>
+            <Txt size={13} weight="semibold" tint={color.bg}>{t('posHandover', { n: toHand })}</Txt>
+          </Touch>
+        )}
         <Touch onPress={() => router.push('/pos-today' as never)} style={st.pill}>
-          <Txt size={13} weight="semibold">{cashier ? t('myToday') : t('posToday')}</Txt>
+          <Txt size={13} weight="semibold">{cashier ? t('posCancelSale') : t('posToday')}</Txt>
         </Touch>
         {!cashier && (
           <Touch onPress={() => router.push('/pos-books' as never)} style={st.pill}>
@@ -93,7 +113,14 @@ export default function Pos() {
           <TextInput value={search} onChangeText={setSearch} placeholder={t('posSearch')} placeholderTextColor={color.faint}
             style={{ flex: 1, fontSize: 15, color: color.ink, fontFamily: font.regular, textAlign: lang === 'ar' ? 'right' : 'left', paddingVertical: 10 }} />
         </Row>
-        {hasDrinks && <Segmented<'all' | 'drinks' | 'products'> items={[['all', t('posAll')], ['drinks', t('posDrinks')], ['products', t('posGoods')]]} value={group} onChange={setGroup} style={{ marginTop: space.sm }} />}
+        {useShelves ? (
+          <>
+            <Segmented<PosShelf> items={shelves.map((k) => [k, t(({ coffee: 'shCoffee', tea: 'shTea', sweets: 'shSweets', goods: 'posGoods' } as const)[k])] as [PosShelf, string])} value={shelf} onChange={setShelf} style={{ marginTop: space.sm }} />
+            {shelf === 'coffee' && temps.length > 1 && !query && (
+              <Segmented<'hot' | 'cold'> items={[['hot', '☕ ' + t('shHot')], ['cold', '🧊 ' + t('shCold')]]} value={temp} onChange={setTemp} style={{ marginTop: space.sm }} />
+            )}
+          </>
+        ) : hasDrinks && <Segmented<'all' | 'drinks' | 'products'> items={[['all', t('posAll')], ['drinks', t('posDrinks')], ['products', t('posGoods')]]} value={group} onChange={setGroup} style={{ marginTop: space.sm }} />}
       </View>
       {q.isError && !q.data ? (
         <ErrorState onRetry={() => { q.refetch(); }} />
@@ -253,9 +280,9 @@ function Checkout({ open, lines, subtotal, methods, loyaltyOn, setQty, onClose, 
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
 
-              {/* Drinks go to the barista screen under this name (API 1.17). */}
-              {!who && lines.some((l) => l.p.group === 'drinks') && (
-                <TextInput value={name} onChangeText={setName} placeholder={t('cupName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+              {/* Every sale waits on the hand-over list under this name (API 1.19); on the cup when it has drinks. */}
+              {!who && lines.length > 0 && (
+                <TextInput value={name} onChangeText={setName} placeholder={lines.some((l) => l.p.group === 'drinks') ? t('cupName') : t('handName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
               )}
               {loyaltyOn && (card ? (
                 <View style={[st.card, { gap: 8 }]}>

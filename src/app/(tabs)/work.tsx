@@ -1,5 +1,6 @@
 // The work screen (API 1.17): what needs doing now, one big button per card.
-// - Drinks: barista tickets from the till (waiting → ready → handed over), oldest first, with how long each waited.
+// - To hand over: every paid till sale, oldest first, with how long each waited. One tap "Handed over" (or a swipe)
+//   clears it; "Ready" is optional, to tell the customer. Recently handed-over ones fold away at the bottom (undo).
 // - To prepare: online and staff orders waiting for their next step, done from the card.
 // Refreshes on its own, so it can stay open on the counter.
 import { useEffect, useState } from 'react';
@@ -33,8 +34,7 @@ export default function Work() {
 
   const barLane = old ? <View style={st.card}><Muted>{t('needsUpdate')}</Muted></View>
     : !bar.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
-    : bar.data.tickets.length === 0 ? <Empty title={t('workBarEmpty')} icon="cash" />
-    : bar.data.tickets.map((x) => <Ticket key={x.id} x={x} />);
+    : <HandOver tickets={bar.data.tickets} />;
   const prepLane = !prep.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
     : prep.data.orders.length === 0 ? <Empty title={t('allClear')} icon="check" />
     : prep.data.orders.map((o) => <OrderCard key={o.id} o={o} label={prep.data!.bulk?.find((b) => b.key === o.next)?.label} />);
@@ -90,6 +90,24 @@ function Tips() {
   );
 }
 
+function HandOver({ tickets }: { tickets: BarTicket[] }) {
+  const { t } = useSession();
+  const [showDone, setShowDone] = useState(false);
+  const open = tickets.filter((x) => x.state !== 'done');
+  const done = tickets.filter((x) => x.state === 'done');
+  return (
+    <>
+      {open.length === 0 ? <Empty title={t('workBarEmpty')} icon="check" /> : open.map((x) => <Ticket key={x.id} x={x} />)}
+      {done.length > 0 && (
+        <Touch onPress={() => setShowDone(!showDone)} style={{ alignSelf: 'center', paddingVertical: space.sm }}>
+          <Muted>{t('workRecent', { n: done.length }) + (showDone ? '  ▴' : '  ▾')}</Muted>
+        </Touch>
+      )}
+      {showDone && done.map((x) => <Ticket key={x.id} x={x} />)}
+    </>
+  );
+}
+
 function Ticket({ x }: { x: BarTicket }) {
   const session = useApiSession();
   const { t } = useSession();
@@ -102,23 +120,22 @@ function Ticket({ x }: { x: BarTicket }) {
   const waited = minutes(x.since);
   const late = x.state === 'waiting' && waited >= 10 ? color.red : x.state === 'waiting' && waited >= 5 ? color.amber : color.muted;
   const done = x.state === 'done';
-  const next = x.state === 'waiting' ? 'ready' : x.state === 'ready' ? 'done' : null;
   return (
-    <SwipeCard label={next === 'ready' ? t('workReady') : next === 'done' ? t('workHanded') : undefined} onSwipe={next ? () => move.mutate(next) : undefined} disabled={move.isPending} style={{ marginBottom: space.md }}>
+    <SwipeCard label={done ? undefined : t('workHanded')} onSwipe={done ? undefined : () => move.mutate('done')} disabled={move.isPending} style={{ marginBottom: space.md }}>
     <View style={[st.card, { gap: 10 }, x.state === 'ready' && st.ready, done && { opacity: 0.5 }]}>
       <Row style={{ justifyContent: 'space-between' }}>
         <Txt size={20} weight="bold" style={{ flex: 1 }} lines={1}>{x.name || '#' + x.number}</Txt>
         <Txt size={14} weight="semibold" tint={late}>{t('workMin', { n: waited })}</Txt>
       </Row>
       {x.lines.map((l, i) => (
-        <Row key={i} gap={10}><View style={st.qty}><Txt size={16} weight="bold" center>{l.qty}</Txt></View><Txt size={17} weight="medium" style={{ flex: 1 }}>{l.name}</Txt></Row>
+        <Row key={i} gap={10}><View style={st.qty}><Txt size={16} weight="bold" center>{l.qty}</Txt></View><Txt size={17} weight="medium" style={{ flex: 1 }}>{l.name}</Txt>{l.drink === false && <Icon name="products" size={16} tint={color.faint} />}</Row>
       ))}
       {x.note ? <Muted>{x.note}</Muted> : null}
       <Muted size={12}>{'#' + x.number}</Muted>
-      {x.state === 'waiting' && <Button label={t('workReady')} icon="check" loading={move.isPending} onPress={() => move.mutate('ready')} />}
-      {x.state === 'ready' && (
+      {!done && (
         <Row gap={8}>
-          {x.whatsapp && (
+          {x.state === 'waiting' && <Button label={t('workReady')} kind="ghost" disabled={move.isPending} onPress={() => move.mutate('ready')} />}
+          {x.state === 'ready' && x.whatsapp && (
             <Touch onPress={() => Linking.openURL('https://wa.me/' + x.whatsapp + '?text=' + encodeURIComponent(t('workReadyMsg', { n: x.name || '' }))).catch(() => {})} style={st.side}>
               <Icon name="whatsapp" size={20} />
             </Touch>
@@ -126,7 +143,7 @@ function Ticket({ x }: { x: BarTicket }) {
           <Button label={t('workHanded')} icon="check" loading={move.isPending} onPress={() => move.mutate('done')} style={{ flex: 1 }} />
         </Row>
       )}
-      {done && <Touch onPress={() => move.mutate('ready')} style={{ alignSelf: 'flex-start' }}><Muted>{t('workUndo')}</Muted></Touch>}
+      {done && <Touch onPress={() => move.mutate('waiting')} style={{ alignSelf: 'flex-start' }}><Muted>{t('workUndo')}</Muted></Touch>}
     </View>
     </SwipeCard>
   );
