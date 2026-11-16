@@ -17,11 +17,19 @@ import { confirmStep, showMessage } from '../../lib/confirm';
 import type { BarTicket, OrderSummary } from '../../lib/types';
 import { Button, Empty, Muted, Row, Screen, Segmented, Skeleton, TagChip, Touch, Txt } from '../../components/ui';
 import { Icon } from '../../components/Icon';
+import { Kiosk, MyOrders, RolePicker } from '../../components/Staff';
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' });
 const minutes = (iso: string | null) => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)) : 0);
 
+// Staff (API 1.40) see their place's screen: the kiosk, or the orders they took. The owner keeps the full work screen.
 export default function Work() {
+  const { cashier, staffRole } = useSession();
+  if (!cashier) return <OwnerWork />;
+  return !staffRole ? <RolePicker /> : staffRole === 'inside' ? <Kiosk /> : <MyOrders />;
+}
+
+function OwnerWork() {
   const session = useApiSession();
   const { t } = useSession();
   const [lane, setLane] = useState<'bar' | 'prepare'>('bar');

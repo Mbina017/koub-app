@@ -253,7 +253,7 @@ function posCatalog(en: boolean): PosCatalog {
     training: true,
     benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
     top: [700, 703, 704, 701, 706, 708],
-    pay_ref: 'required',
+    pay_ref: 'off', // API 1.40: no payment number to type
   };
 }
 function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
@@ -285,6 +285,14 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   posSales.unshift(sale);
   return sale;
 }
+// Demo only: the web demo can show the staff screens (API 1.40) with ?demo_role=cashier in the address.
+function demoRole(): 'owner' | 'cashier' {
+  try {
+    if (/[?&]demo_role=cashier\b/.test(String(globalThis.location?.search ?? ''))) globalThis.sessionStorage?.setItem('koub.demo.role', 'cashier');
+    return globalThis.sessionStorage?.getItem('koub.demo.role') === 'cashier' ? 'cashier' : 'owner';
+  } catch { return 'owner'; }
+}
+demoRole(); // read the address once at start, before any redirect drops it
 // Barista tickets (API 1.17), demo only.
 const demoBar: BarTicket[] = [
   { id: 5021, number: '5021', no: 7, where: '🚗 لاندكروزر بيضاء', arrived: { at: new Date(Date.now() - 2 * 60_000).toISOString(), spot: 'موقف 12' }, state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش / فانيلا / كراميل لاتيه', qty: 2, drink: true, options: 'فانيلا · ثلج خفيف' }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
@@ -293,6 +301,14 @@ const demoBar: BarTicket[] = [
 ];
 demoBar.forEach((x) => x.lines.forEach((l, i) => { l.i = i; l.ready = false; }));
 demoBar[1].pickup = new Date(Math.ceil((Date.now() + 20 * 60_000) / 900_000) * 900_000).toISOString();
+// API 1.40: who took each order (the demo signs in as KOUB), and kiosk pickups. Synthetic.
+Object.assign(demoBar[0], { by: 'KOUB', mine: true, online: false, where: '🚗 12345 · لاندكروزر بيضاء' });
+Object.assign(demoBar[1], { by: '', mine: false, online: true });
+Object.assign(demoBar[2], { by: 'Demo Staff', mine: false, online: false });
+const demoPickups = [
+  { id: 1054, number: '1054', lines: [{ name: 'KOUB 2-PIECE SET', qty: 1 }], cod: false, collect: null, at: new Date(Date.now() - 5 * 3600_000).toISOString() },
+  { id: 1060, number: '1060', lines: [{ name: 'Riffa mug', qty: 2 }], cod: true, collect: 17, at: new Date(Date.now() - 40 * 60_000).toISOString() },
+];
 // Till staff (API 1.15), demo only.
 let demoPin = false;
 const demoStaff: PosStaff[] = [
@@ -475,6 +491,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
   if (path === '/pos/close') return posCloseSave(p, p.lang === 'en') as T;
   if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
+  if (/^\/bar\/pickup\/\d+\/done$/.test(path)) { const i = demoPickups.findIndex((x) => x.id === Number(path.split('/')[3])); if (i < 0) throw new Error(p.lang === 'en' ? 'This order was handed over already.' : 'هالطلب انسلّم من قبل.'); demoPickups.splice(i, 1); return { ok: true, id: Number(path.split('/')[3]) } as T; }
   if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); if (x.state === 'waiting') x.lines.forEach((l) => (l.ready = false)); return x as T; }
   if (/^\/bar\/\d+\/start$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() }; return x as T; }
   if (/^\/bar\/\d+\/item$/.test(path)) {
@@ -712,7 +729,7 @@ export async function demo<T>(path: string, p: Record<string, string | number | 
 
 async function demoAr<T>(path: string, p: Record<string, string | number | undefined>): Promise<T> {
   await new Promise((r) => setTimeout(r, 350));
-  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true, role: 'owner' };
+  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true, role: demoRole() };
   if (path === '/me') return me as T;
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
@@ -732,6 +749,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
+  if (path === '/bar/pickup') return { orders: demoPickups.map((x) => ({ ...x })) } as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
   if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1, credit: demoCredit.on ? 6.6 : null } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;

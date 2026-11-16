@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, AheadSettings, LoyaltyOffers, CreditSettings, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink, FeedbackView } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, AheadSettings, LoyaltyOffers, CreditSettings, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink, FeedbackView, PickupList } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -167,6 +167,9 @@ export const api = {
   customer: (s: Session, phone: string, country: string) => get<CustomerLookup>(s, '/customer', { phone, country }),
   // The barista queue (API 1.17).
   bar: (s: Session) => get<BarList>(s, '/bar'),
+  // Kiosk pickups (API 1.40): store pickup orders to hand over, and one handed over.
+  barPickup: (s: Session) => get<PickupList>(s, '/bar/pickup'),
+  barPickupDone: (s: Session, id: number) => post<{ ok: boolean; id: number }>(s, '/bar/pickup/' + id + '/done', { lang: appLang }),
   barSet: (s: Session, id: number, state: BarTicket['state']) => post<BarTicket>(s, '/bar/' + id, { state, lang: appLang }),
   // API 1.27: "Start" (take = take it over from another barista), and one item ready.
   barStart: (s: Session, id: number, take = false) => post<BarTicket>(s, '/bar/' + id + '/start', { take, lang: appLang }),

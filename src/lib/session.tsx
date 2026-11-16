@@ -12,6 +12,9 @@ const KEY = 'koub.session.v1';
 const LOCK = 'koub.lock.v1';
 const LANG = 'koub.lang.v1';
 const PUSH = 'koub.push.v1';
+// API 1.40: on this device, is the staff member in the kiosk (making orders) or outside (taking them)?
+const ROLE = 'koub.staffrole.v1';
+export type StaffRole = 'inside' | 'outside';
 export type { PushPrefs };
 export type LangPref = 'auto' | Lang;
 
@@ -29,6 +32,9 @@ type Ctx = {
   me: Me | null;
   // A cashier account (API 1.15): the till only.
   cashier: boolean;
+  // Staff only: chosen on first sign-in, changeable from the staff menu. null until chosen.
+  staffRole: StaffRole | null;
+  setStaffRole: (r: StaffRole | null) => Promise<void>;
   lang: Lang;
   t: T;
   lock: boolean;
@@ -50,12 +56,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [lock, setLockState] = useState(false);
   const [langPref, setPref] = useState<LangPref>('auto');
   const [push, setPushState] = useState<PushPrefs>(PUSH_DEFAULT);
+  const [staffRole, setRole] = useState<StaffRole | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await store.get(KEY);
         setLockState((await store.get(LOCK)) === '1');
+        const role = await store.get(ROLE);
+        if (role === 'inside' || role === 'outside') setRole(role);
         const pref = await store.get(LANG);
         if (pref === 'ar' || pref === 'en') { setPref(pref); setApiLang(pref); }
         const savedPush = await store.get(PUSH);
@@ -98,7 +107,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
     return {
       push, savePush,
-      ready, session, me, cashier: me?.role === 'cashier', lang, t: translator(lang), lock, langPref,
+      ready, session, me, cashier: me?.role === 'cashier', lang, staffRole,
+      setStaffRole: async (r) => { if (r) await store.set(ROLE, r); else await store.del(ROLE); setRole(r); }, t: translator(lang), lock, langPref,
       // The caller refetches its data so labels from the store switch too.
       setLangPref: async (p) => {
         await store.set(LANG, p); setApiLang(p === 'auto' ? undefined : p); setPref(p);
@@ -122,11 +132,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOut: async () => {
         // Stop alerts to this phone before forgetting the store.
         if (session && push.on) await setPush(session, push, lang, false).catch(() => {});
-        await store.del(KEY); await store.del(PUSH); setPushState(PUSH_DEFAULT); setSession(null); setMe(null);
+        await store.del(KEY); await store.del(PUSH); await store.del(ROLE); setPushState(PUSH_DEFAULT); setRole(null); setSession(null); setMe(null);
       },
       setLock: async (on) => { await store.set(LOCK, on ? '1' : '0'); setLockState(on); },
     };
-  }, [ready, session, me, lock, langPref, push, begin]);
+  }, [ready, session, me, lock, langPref, push, begin, staffRole]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

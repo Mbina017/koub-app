@@ -279,8 +279,13 @@ export type BarTicket = { id: number; number: string; state: 'waiting' | 'ready'
   // Today's order number (API 1.22): staff call the customer by it.
   no?: number | null;
   // API 1.23: where to hand it over (in the shop, or the car).
-  where?: string };
+  where?: string;
+  // API 1.40: who took the order at the till ('' for an online order), whether it is mine, and from the online menu.
+  by?: string; mine?: boolean; online?: boolean };
 export type BarList = { tickets: BarTicket[]; waiting: number };
+// API 1.40: store pickup orders for the kiosk: number, items, paid or cash on pickup (the amount only then).
+export type PickupOrder = { id: number; number: string; lines: { name: string; qty: number }[]; cod: boolean; collect: number | null; at: string | null };
+export type PickupList = { orders: PickupOrder[] };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
 export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number; credit?: number | null };
 export type ReceiptLoyalty = { credit?: number | null; code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number };
