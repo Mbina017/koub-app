@@ -1,6 +1,6 @@
-// Order ahead (API 1.29), owner only: switch koubbh.com/order on or off, the hours, how many cups the bar takes per
-// 15 minutes, and how soon the first pickup can be. Paid orders land on the hand-over list with their pickup time.
-// API 1.31: the order-from-your-car QR for the parking (koubbh.com/order?car=1), shown, shared or printed as a sign.
+// Order ahead (API 1.29), owner only: switch ordering on the menu (koubbh.com/menu, the one customer link since
+// API 1.35) on or off, the hours, how many cups the bar takes per 15 minutes, and how soon the first pickup can be.
+// Paid orders land on the hand-over list with their pickup time; car orders show the plate, car and where it is parked.
 import { useEffect, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
@@ -12,9 +12,6 @@ import { color, font, radius, space } from '../lib/theme';
 import { showMessage } from '../lib/confirm';
 import { Button, ErrorState, Muted, Row, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { QrCode } from '../components/QrCode';
-import { sharePdf } from '../lib/print';
-import { carSignHtml } from '../lib/sign';
 
 const hhmm = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s.trim());
 
@@ -67,16 +64,6 @@ export default function PosAhead() {
               <Button label={t('aheadShare')} icon="whatsapp" kind="light" onPress={() => Share.share({ message: t('aheadShareMsg', { u: d.url }) }).catch(() => {})} />
             </View>
 
-            <View style={[st.card, { gap: 10, alignItems: 'center' }]}>
-              <Txt size={15} weight="semibold" style={{ alignSelf: 'stretch' }}>{'🚗 ' + t('aheadCarTitle')}</Txt>
-              <View style={st.qr}><QrCode value={d.url + '?car=1'} size={190} /></View>
-              <Muted size={12} center>{t('aheadCarHint')}</Muted>
-              <Row gap={8} style={{ alignSelf: 'stretch' }}>
-                <Button label={t('aheadCarPrint')} icon="print" style={{ flex: 1 }} onPress={() => sharePdf(carSignHtml(d.url + '?car=1', t('aheadCarSignTitle'), t('aheadCarSignBody'), lang === 'ar'), 'KOUB-order-from-your-car').catch(() => {})} />
-                <Button label={t('aheadCarShare')} kind="light" style={{ flex: 1 }} onPress={() => Share.share({ message: d.url + '?car=1' }).catch(() => {})} />
-              </Row>
-            </View>
-
             <View style={[st.card, { gap: 10 }]}>
               <Txt size={15} weight="semibold">{t('aheadSettings')}</Txt>
               <Row gap={8}>
@@ -123,6 +110,5 @@ const st = StyleSheet.create({
   // Our own switch: the web one draws its knob outside the track in right-to-left pages.
   toggle: { width: 56, height: 32, borderRadius: 16, padding: 3, justifyContent: 'center', direction: 'ltr' },
   knob: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFFFFF' },
-  qr: { padding: 8, borderRadius: radius.md, backgroundColor: '#FFFFFF' },
   slot: { minWidth: 70, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.md, backgroundColor: color.sunken, alignItems: 'center' },
 });
