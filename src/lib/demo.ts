@@ -319,11 +319,11 @@ function staffReport(period: string): PosStaffReport {
   const blank = (id: number, name: string): PosStaffRow => ({ id, name, count: 0, total: 0, by_method: { cash: 0, card: 0, benefit: 0, credit: 0 }, discounts: 0, discount_count: 0, voids: 0, void_total: 0, refunds: 0 });
   const k = period === 'today' ? 1 : period === 'yesterday' ? 1.2 : period === '7days' ? 6 : 24;
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
-  const sara = { ...blank(901, 'سارة'), count: Math.round(14 * k), total: r3(31.6 * k), by_method: { cash: r3(12.4 * k), card: r3(15.2 * k), benefit: r3(4 * k), credit: 0 }, discounts: 1.5, discount_count: 1, voids: 1, void_total: 2.2 };
+  const sara = { ...blank(901, 'سارة'), count: Math.round(14 * k), total: r3(31.6 * k), by_method: { cash: r3(12.4 * k), card: r3(15.2 * k), benefit: r3(4 * k), credit: 0 }, discounts: 1.5, discount_count: 1, voids: 1, void_total: 2.2, made: Math.round(3 * k), make_min: 3.5, handed: Math.round(12 * k), pickups: 0 };
   const day = new Date().toISOString().slice(0, 10);
   return {
     period: { preset: period as ShopPeriod, start: day, end: day, label: day },
-    staff: [sara, ...demoStaff.filter((s) => s.id !== 901).map((s) => blank(s.id, s.name))],
+    staff: [sara, ...demoStaff.filter((s) => s.id !== 901).map((s, i) => (i === 0 ? { ...blank(s.id, s.name), made: Math.round(11 * k), make_min: 4.2, handed: 1, pickups: Math.round(2 * k) } : blank(s.id, s.name)))],
     events: [
       { id: 5012, number: '5012', date: new Date(Date.now() - 50 * 60_000).toISOString(), staff: 'سارة', total: 2.2, kind: 'void', by: 'سارة', approved: 'pin' },
       { id: 5009, number: '5009', date: new Date(Date.now() - 95 * 60_000).toISOString(), staff: 'سارة', total: 6.6, kind: 'discount', amount: 1.5, approved: 'pin' },

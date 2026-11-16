@@ -72,6 +72,15 @@ function Person({ p }: { p: PosStaffRow }) {
       {(['cash', 'card', 'benefit'] as PosMethod[]).filter((m) => m !== 'cash' || (p.by_method?.cash ?? 0) > 0).map((m) => (
         <Row key={m} style={{ justifyContent: 'space-between' }}><Muted>{label[m]}</Muted><Txt size={14}>{money(p.by_method[m] ?? 0, lang)}</Txt></Row>
       ))}
+      {((p.made ?? 0) > 0 || (p.handed ?? 0) > 0 || (p.pickups ?? 0) > 0) && (
+        // The kiosk side (API 1.41): what they made and handed over, and how long making took.
+        <View style={st.kiosk}>
+          <Kpi label={t('rpMade')} value={String(p.made ?? 0)} />
+          <Kpi label={t('rpMakeTime')} value={p.make_min != null ? t('rpMin', { n: p.make_min }) : '—'} />
+          <Kpi label={t('rpHanded')} value={String(p.handed ?? 0)} />
+          {(p.pickups ?? 0) > 0 && <Kpi label={t('rpPickups')} value={String(p.pickups)} />}
+        </View>
+      )}
       {(p.discount_count > 0 || p.voids > 0 || p.refunds > 0 || (p.free_count ?? 0) > 0 || (p.orders ?? 0) > 0) && (
         <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 2 }}>
           {p.discount_count > 0 && <TagChip label={t('rpDiscounts') + ' ' + p.discount_count + ' · ' + money(p.discounts, lang)} tone="amber" small />}
@@ -83,6 +92,10 @@ function Person({ p }: { p: PosStaffRow }) {
       )}
     </View>
   );
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return <View style={{ flex: 1, alignItems: 'center', gap: 2 }}><Txt size={18} weight="bold">{value}</Txt><Muted size={11} center>{label}</Muted></View>;
 }
 
 function Event({ e, first, when }: { e: PosStaffEvent; first: boolean; when: string }) {
@@ -103,6 +116,7 @@ function Event({ e, first, when }: { e: PosStaffEvent; first: boolean; when: str
 }
 
 const st = StyleSheet.create({
+  kiosk: { flexDirection: 'row', gap: 6, paddingVertical: 8, borderRadius: radius.md, backgroundColor: color.sunken },
   top: { paddingHorizontal: space.md, paddingBottom: space.sm, gap: 4, backgroundColor: color.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },

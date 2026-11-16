@@ -399,7 +399,9 @@ export type PosStaff = { id: number; name: string; login: string; active: boolea
 export type PosStaffList = { pin_set: boolean; staff: PosStaff[] };
 // Returned once when an account is made, switched on again or given a new password.
 export type PosStaffSecret = { staff: PosStaff; login?: string; password?: string };
-export type PosStaffRow = { id: number; name: string; login?: string; free?: number; free_count?: number; orders?: number; orders_total?: number; count: number; total: number; by_method: Record<PosMethod, number>; discounts: number; discount_count: number; voids: number; void_total: number; refunds: number };
+export type PosStaffRow = { id: number; name: string; login?: string; free?: number; free_count?: number; orders?: number; orders_total?: number; count: number; total: number; by_method: Record<PosMethod, number>; discounts: number; discount_count: number; voids: number; void_total: number; refunds: number;
+  // API 1.41: the kiosk side: made ready (median minutes to make), handed over to customers, store pickups handed over.
+  made?: number; make_min?: number | null; handed?: number; pickups?: number };
 export type PosStaffEvent = { id: number; number: string; date: string | null; staff: string; login?: string; total: number; kind: 'void' | 'discount' | 'free' | 'order'; method?: string; amount?: number; by?: string | null; approved: string };
 export type PosStaffReport = { period: { preset: ShopPeriod; start: string; end: string; label: string }; staff: PosStaffRow[]; events: PosStaffEvent[] };
 

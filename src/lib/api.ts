@@ -177,6 +177,8 @@ export const api = {
   posStaffReport: (s: Session, period: ShopPeriod) => get<PosStaffReport>(s, '/pos/staff-report', { period }),
   // Shop books (API 1.7). An expense carries its own `ref`, so sending it again never records it twice.
   posBooks: (s: Session, period: ShopPeriod) => get<ShopBooks>(s, '/pos/books', { period }),
+  // A whole calendar month (API 1.41, the monthly report): the store takes any range up to a year.
+  posBooksRange: (s: Session, from: string, to: string) => get<ShopBooks>(s, '/pos/books', { period: 'custom', from, to }),
   posExpenseAdd: (s: Session, e: ShopExpenseInput) => post<{ entry: ShopExpense; repeat?: boolean }>(s, '/pos/expenses', { ...e, lang: appLang }),
   posExpenseRemove: (s: Session, date: string, id: string) => post<{ ok: boolean }>(s, '/pos/expenses/remove', { date, id, lang: appLang }),
   // Orders staff place for a customer (API 1.8). The order carries its own `ref`, so sending it again never makes two.
