@@ -36,7 +36,7 @@ export const font = {
   medium: 'IBMPlexSansArabic_500Medium',
   semibold: 'IBMPlexSansArabic_600SemiBold',
   bold: 'IBMPlexSansArabic_700Bold',
-  brand: 'CormorantGaramond_600SemiBold',
+  brand: 'IBMPlexSansArabic_700Bold', // was the serif wordmark font; the logo is an image now
 } as const;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;
