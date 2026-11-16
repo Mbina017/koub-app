@@ -7,6 +7,7 @@ import { useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
 import { Button, Muted, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { Logo } from '../components/Logo';
 
 export default function Login() {
   const { t, lang, signIn, signInDemo, setLangPref } = useSession();
@@ -42,8 +43,8 @@ export default function Login() {
           <Icon name="globe" size={16} />
           <Txt size={13} weight="semibold">{lang === 'ar' ? 'English' : 'العربية'}</Txt>
         </Touch>
-        <Txt size={52} center style={{ fontFamily: font.brand, letterSpacing: 6, lineHeight: 60 }} ltr>KOUB</Txt>
-        <Muted center size={11} style={{ letterSpacing: 2.5, marginBottom: 40 }} ltr>YOUR DAILY WORKSPACE</Muted>
+        <Logo width={220} center />
+        <Muted center size={11} style={{ letterSpacing: 2.5, marginTop: 16, marginBottom: 40 }} ltr>YOUR DAILY WORKSPACE</Muted>
         <Txt size={26} weight="bold">{t('signInTitle')}</Txt>
         <Muted size={15} style={{ marginTop: 4, marginBottom: 28 }}>{t('signInSub')}</Muted>
 
