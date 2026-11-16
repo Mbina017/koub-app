@@ -326,6 +326,19 @@ const demoOffers = { birthday: true, comeback: false };
 const demoCredit: { on: boolean; packs: [number, number][] } = { on: false, packs: [[10, 11], [20, 23], [30, 35]] };
 // Order ahead (API 1.29), demo only.
 const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
+// Customer ratings (API 1.39), demo only. Synthetic.
+let demoReviewUrl = '';
+const demoFeedback = [
+  { m: 25, stars: 5, note: 'اللاتيه الإسباني رهيب 🤍', anon: false, name: 'Synthetic Guest', no: 18 },
+  { m: 140, stars: 2, note: 'انتظرت وايد في السيارة', anon: true, name: '', no: null },
+  { m: 600, stars: 4, note: '', anon: false, name: 'Demo Customer', no: 7 },
+  { m: 1500, stars: 5, note: 'Lovely cookies', anon: true, name: '', no: null },
+];
+function feedbackView() {
+  const items = demoFeedback.map((f) => ({ at: new Date(Date.now() - f.m * 60000).toISOString(), stars: f.stars, note: f.note, anon: f.anon, name: f.name, no: f.no }));
+  const avg = Math.round((items.reduce((a, f) => a + f.stars, 0) / items.length) * 10) / 10;
+  return { review_url: demoReviewUrl, count: items.length, avg, month: { count: items.length, avg }, items };
+}
 function aheadView(): AheadSettings {
   return { ...demoAhead, slots: [], url: 'https://koubbh.com/menu/' };
 }
@@ -508,6 +521,11 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
   }
   if (path === '/loyalty/credit') { demoCredit.on = !!p.on; demoCredit.packs = (p.packs as [number, number][]) ?? demoCredit.packs; return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T; }
   if (path === '/loyalty/offers') { demoOffers.birthday = !!p.birthday; demoOffers.comeback = !!p.comeback; return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T; }
+  if (path === '/feedback') {
+    const u = String(p.review_url ?? '').trim();
+    if (u && !/^https:\/\/(www\.)?(g\.page|google\.[a-z.]+|search\.google\.com|maps\.app\.goo\.gl|goo\.gl)\//i.test(u)) throw new Error(p.lang === 'en' ? 'Paste the "Ask for reviews" link from your Google Business Profile.' : 'حط رابط "اطلب تقييمات" من ملفك في Google Business.');
+    demoReviewUrl = u; return feedbackView() as T;
+  }
   if (path === '/pos/ahead') { Object.assign(demoAhead, { on: !!p.on, from: String(p.from), to: String(p.to), cap: Number(p.cap), lead: Number(p.lead) }); return aheadView() as T; }
   if (path === '/pos/stock/move') {
     const x = demoIng[String(p.id)]; if (!x) throw new Error('not found'); const q = Number(p.qty);
@@ -710,6 +728,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/loyalty/credit') return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T;
   if (path === '/loyalty/offers') return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T;
   if (path === '/pos/ahead') return aheadView() as T;
+  if (path === '/feedback') return feedbackView() as T;
   if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
