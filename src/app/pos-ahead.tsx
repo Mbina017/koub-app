@@ -1,6 +1,6 @@
 // Order ahead (API 1.29), owner only: switch ordering on the menu (koubbh.com/menu, the one customer link since
-// API 1.35) on or off, the hours, how many cups the bar takes per 15 minutes, and how soon the first pickup can be.
-// Paid orders land on the hand-over list with their pickup time; car orders show the plate, car and where it is parked.
+// API 1.35) on or off, and its hours. Orders are for now, from customers already there (at the kiosk or in the car
+// outside: plate, car and where it is parked); paid orders land on the hand-over list, car ones marked in the car.
 import { useEffect, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
@@ -25,16 +25,14 @@ export default function PosAhead() {
   const [on, setOn] = useState(false);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [cap, setCap] = useState('');
-  const [lead, setLead] = useState('');
-  useEffect(() => { if (d) { setOn(d.on); setFrom(d.from); setTo(d.to); setCap(String(d.cap)); setLead(String(d.lead)); } }, [d]);
+  useEffect(() => { if (d) { setOn(d.on); setFrom(d.from); setTo(d.to); } }, [d]);
   const save = useMutation({
-    mutationFn: (next: boolean) => api.posAheadSet(session, { on: next, from: from.trim(), to: to.trim(), cap: Number(cap) || 6, lead: Number(lead) || 10 }),
+    mutationFn: (next: boolean) => api.posAheadSet(session, { on: next, from: from.trim(), to: to.trim(), cap: d?.cap ?? 6, lead: d?.lead ?? 10 }),
     onSuccess: (r) => qc.setQueryData(['pos-ahead'], r),
     onError: (e) => { if (d) setOn(d.on); showMessage(t('notUpdated'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message); },
   });
-  const valid = hhmm(from) && hhmm(to) && from.trim() < to.trim() && Number(cap) >= 1 && Number(lead) >= 5;
-  const changed = !!d && (from !== d.from || to !== d.to || String(d.cap) !== cap || String(d.lead) !== lead);
+  const valid = hhmm(from) && hhmm(to) && from.trim() < to.trim();
+  const changed = !!d && (from !== d.from || to !== d.to);
   const input = [st.input, { fontFamily: font.regular }];
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
@@ -70,29 +68,10 @@ export default function PosAhead() {
                 <View style={{ flex: 1, gap: 4 }}><Muted size={12}>{t('aheadFrom')}</Muted><TextInput value={from} onChangeText={setFrom} placeholder="07:00" placeholderTextColor={color.faint} style={input} keyboardType="numbers-and-punctuation" maxLength={5} /></View>
                 <View style={{ flex: 1, gap: 4 }}><Muted size={12}>{t('aheadTo')}</Muted><TextInput value={to} onChangeText={setTo} placeholder="23:00" placeholderTextColor={color.faint} style={input} keyboardType="numbers-and-punctuation" maxLength={5} /></View>
               </Row>
-              <Row gap={8}>
-                <View style={{ flex: 1, gap: 4 }}><Muted size={12}>{t('aheadCap')}</Muted><TextInput value={cap} onChangeText={setCap} keyboardType="number-pad" style={input} maxLength={2} /></View>
-                <View style={{ flex: 1, gap: 4 }}><Muted size={12}>{t('aheadLead')}</Muted><TextInput value={lead} onChangeText={setLead} keyboardType="number-pad" style={input} maxLength={3} /></View>
-              </Row>
               {!valid && <Muted size={12} style={{ color: color.red }}>{t('aheadInvalid')}</Muted>}
               {changed && <Button label={t('save')} loading={save.isPending} disabled={!valid || save.isPending} onPress={() => save.mutate(on)} />}
             </View>
 
-            {on && (
-              <View style={[st.card, { gap: 8 }]}>
-                <Txt size={15} weight="semibold">{t('aheadSlots')}</Txt>
-                {d.slots.length === 0 ? <Muted>{t('aheadNoSlots')}</Muted> : (
-                  <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                    {d.slots.map((s) => (
-                      <View key={s.t} style={[st.slot, s.free <= 0 && { opacity: 0.4 }]}>
-                        <Txt size={14} weight="semibold" ltr>{s.label}</Txt>
-                        <Muted size={11}>{t('aheadFree', { n: s.free })}</Muted>
-                      </View>
-                    ))}
-                  </Row>
-                )}
-              </View>
-            )}
             <Muted size={12} center>{t('aheadNote')}</Muted>
           </>
         )}
@@ -110,5 +89,4 @@ const st = StyleSheet.create({
   // Our own switch: the web one draws its knob outside the track in right-to-left pages.
   toggle: { width: 56, height: 32, borderRadius: 16, padding: 3, justifyContent: 'center', direction: 'ltr' },
   knob: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFFFFF' },
-  slot: { minWidth: 70, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.md, backgroundColor: color.sunken, alignItems: 'center' },
 });

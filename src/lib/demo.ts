@@ -327,9 +327,7 @@ const demoCredit: { on: boolean; packs: [number, number][] } = { on: false, pack
 // Order ahead (API 1.29), demo only.
 const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
 function aheadView(): AheadSettings {
-  const now = Date.now(); const first = Math.ceil((now + demoAhead.lead * 60_000) / 900_000) * 900_000;
-  const slots = Array.from({ length: 12 }, (_, i) => first + i * 900_000).map((ms, i) => ({ t: ms / 1000, label: new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bahrain' }), free: i === 2 ? 0 : demoAhead.cap - (i % 3) }));
-  return { ...demoAhead, slots, url: 'https://koubbh.com/order' };
+  return { ...demoAhead, slots: [], url: 'https://koubbh.com/menu/' };
 }
 // Ingredient stock and insights (API 1.28), demo only.
 const demoIng: Record<string, { name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number }> = {
