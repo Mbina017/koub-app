@@ -58,7 +58,7 @@ export const useLastAlertTap: () => Notifications.NotificationResponse | null | 
 // Where a tapped alert opens, if it is one of ours: the new order, the unfinished payments list, pre-orders or products.
 export type AlertTarget =
   | { pathname: '/order/[id]'; params: { id: string } }
-  | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' | '/work' | '/pos-feedback' | '/pos-today' };
+  | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' | '/work' | '/pos-feedback' | '/pos-today' | '/pos-month' };
 export function targetFromNotification(r: Notifications.NotificationResponse | null | undefined): AlertTarget | null {
   const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown; date?: unknown } | undefined;
   switch (data?.type) {
@@ -72,6 +72,8 @@ export function targetFromNotification(r: Notifications.NotificationResponse | n
     case 'arrived': return { pathname: '/work' };
     // API 1.40: an order I took is ready: my orders.
     case 'bar_ready': return { pathname: '/work' };
+    // API 1.41: on the 1st, last month's report is ready.
+    case 'month_report': return { pathname: '/pos-month' };
     // API 1.39: a customer note or a low rating: the feedback list (owner).
     case 'feedback': return { pathname: '/pos-feedback' };
     // API 1.25 / 1.30: a close that does not match, and the owner's daily summary: open that day's close.
