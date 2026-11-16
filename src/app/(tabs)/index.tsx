@@ -4,7 +4,7 @@ import { Redirect, router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { useApiSession, useSession } from '../../lib/session';
-import { color, font, radius, space, tone } from '../../lib/theme';
+import { color, radius, space, tone } from '../../lib/theme';
 import { currency, money, num, pct, today } from '../../lib/format';
 import { ordersCount } from '../../lib/i18n';
 import type { Home as HomeData, HomePeriod } from '../../lib/types';
@@ -12,6 +12,7 @@ import { Card, ErrorState, FadeIn, Muted, Row, Screen, SectionTitle, Segmented, 
 import { SalesLine } from '../../components/Charts';
 import { OrderRow } from '../../components/OrderRow';
 import { Icon, type IconName } from '../../components/Icon';
+import { Logo } from '../../components/Logo';
 
 // A staff account has no Home: its app opens on the till; Work, Orders and More are a tap away.
 export default function HomeTab() {
@@ -29,7 +30,7 @@ function Home() {
   const header = (
     <Row style={{ justifyContent: 'space-between', paddingHorizontal: space.lg, paddingBottom: space.md }}>
       <View>
-        <Txt size={30} style={{ fontFamily: font.brand, letterSpacing: 3, lineHeight: 36 }} ltr>KOUB</Txt>
+        <Logo width={104} />
         <Muted>{today(new Date(), lang)}</Muted>
       </View>
       <Row gap={8}>
