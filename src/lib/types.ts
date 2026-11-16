@@ -342,6 +342,9 @@ export type RefundOwed = { id: number; no: number | null; number: string; date: 
 export type CreditSettings = { on: boolean; packs: [number, number][]; outstanding: number; cards: number; month_paid: number; month_credit: number };
 export type LoyaltyOffers = { birthday: boolean; comeback: boolean; birthdays: number; comeback_days: number };
 export type AheadSettings = { on: boolean; from: string; to: string; cap: number; lead: number; slots: { t: number; label: string; free: number }[]; url: string };
+// API 1.39: customer ratings after pickup (owner). Anonymous ones have no name or number.
+export type FeedbackItem = { at: string; stars: number; note: string; anon: boolean; name: string; no: number | null };
+export type FeedbackView = { review_url: string; count: number; avg: number | null; month: { count: number; avg: number | null }; items: FeedbackItem[] };
 // Ingredient stock (API 1.28), owner only.
 export type StockUnit = 'g' | 'ml' | 'pc';
 export type Ingredient = { id: string; name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number; days_left: number | null; is_low: boolean };
