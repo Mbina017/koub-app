@@ -23,6 +23,7 @@ import { LoyaltyScan } from '../components/LoyaltyScan';
 import { QrCode } from '../components/QrCode';
 import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { StaffMenu } from '../components/Staff';
 
 // Rounds like the store's PHP round(): 0.30749999… (float error for 0.3075) goes up, so totals always agree.
 const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
@@ -30,8 +31,6 @@ const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
 type Line = { key: string; p: PosProduct; qty: number; choice: PosChoice | null; note: string };
 type CartLine = { key: string; id: number; qty: number; choice: PosChoice | null; note: string };
 const lineKey = (id: number, choice: PosChoice | null, note: string) => id + '|' + (choice?.key ?? '') + '|' + note;
-// Like the store: capitals and digits only (API 1.25).
-const cleanPayRef = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
 const newRef = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const parse = (s: string) => { const n = Number(s.replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; };
 const tick = (kind: 'light' | 'ok' | 'warn') => {
@@ -40,7 +39,8 @@ const tick = (kind: 'light' | 'ok' | 'warn') => {
   else Haptics.notificationAsync(kind === 'ok' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => {});
 };
 
-export default function Pos() {
+// inTab (API 1.40): staff outside open the till as their "New order" tab, above the tab bar, with their menu.
+export default function Pos({ inTab = false }: { inTab?: boolean } = {}) {
   const session = useApiSession();
   const { t, lang, cashier, me } = useSession();
   const insets = useSafeAreaInsets();
@@ -48,7 +48,9 @@ export default function Pos() {
   const q = useQuery({ queryKey: ['pos-catalog'], queryFn: () => api.posCatalog(session) });
   // What is still to be handed to customers (API 1.19: every sale), one tap away from the till.
   const bar = useQuery({ queryKey: ['bar'], queryFn: () => api.bar(session), refetchInterval: 15_000, retry: false });
-  const toHand = bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
+  const toHand = cashier ? 0 : bar.data?.tickets.filter((x) => x.state !== 'done').length ?? 0;
+  // Room for the tab bar under the pay button when the till is a tab.
+  const tabPad = inTab ? 64 : 0;
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<'all' | 'drinks' | 'products'>('all');
   // '⭐ Top' (API 1.23): the best sellers of the week, first when the store sends them.
@@ -118,9 +120,9 @@ export default function Pos() {
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
       <Row style={[st.top, { paddingTop: insets.top + 6 }]}>
-        {cashier ? (
-          // Staff open on the till; closing it shows their tabs (Work, Orders, More, where they sign out).
-          <Touch onPress={() => router.replace('/work' as never)} style={st.iconBtn} accessibilityLabel={t('posExit')}>
+        {inTab ? null : cashier ? (
+          // Staff reach the full-screen till only by an old link: back to their tabs.
+          <Touch onPress={() => router.replace('/' as never)} style={st.iconBtn} accessibilityLabel={t('posExit')}>
             <Icon name="close" size={22} />
           </Touch>
         ) : (
@@ -129,7 +131,7 @@ export default function Pos() {
           </Touch>
         )}
         <View style={{ flex: 1 }}>
-          <Txt size={19} weight="bold">{t('pos')}</Txt>
+          <Txt size={19} weight="bold">{inTab ? t('tabNewOrder') : t('pos')}</Txt>
           {cashier && me?.name ? <Muted size={12} lines={1}>{t('posSignedIn', { n: me.name })}</Muted> : null}
         </View>
         {toHand > 0 && (
@@ -137,14 +139,17 @@ export default function Pos() {
             <Txt size={13} weight="semibold" tint={color.bg}>{t('posHandover', { n: toHand })}</Txt>
           </Touch>
         )}
-        <Touch onPress={() => router.push('/pos-today' as never)} style={st.pill}>
-          <Txt size={13} weight="semibold">{cashier ? t('posCancelSale') : t('posToday')}</Txt>
-        </Touch>
+        {!cashier && (
+          <Touch onPress={() => router.push('/pos-today' as never)} style={st.pill}>
+            <Txt size={13} weight="semibold">{t('posToday')}</Txt>
+          </Touch>
+        )}
         {!cashier && (
           <Touch onPress={() => router.push('/pos-books' as never)} style={st.pill}>
             <Txt size={13} weight="semibold">{t('booksShort')}</Txt>
           </Touch>
         )}
+        {cashier && <StaffMenu />}
       </Row>
       {q.data?.training ? (
         <Row gap={8} style={st.training}>
@@ -180,7 +185,7 @@ export default function Pos() {
           numColumns={cols}
           keyExtractor={(p) => String(p.id)}
           columnWrapperStyle={{ gap: space.md }}
-          contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + (count && !wide ? 110 : space.xl) }}
+          contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + tabPad + (count && !wide ? 110 : space.xl) }}
           ListFooterComponent={count === 0 ? <Muted center size={12} style={{ marginTop: space.sm }}>{t('posHoldHint')}</Muted> : undefined}
           ListEmptyComponent={<Empty title={t('posNoProducts')} icon="products" />}
           onRefresh={() => { q.refetch(); }}
@@ -205,7 +210,7 @@ export default function Pos() {
       </View>
       {wide && (
         // The open order, always in view on an iPad: lines with their options, quantities, total, pay.
-        <View style={[st.panel, { paddingBottom: insets.bottom + space.md }]}>
+        <View style={[st.panel, { paddingBottom: insets.bottom + tabPad + space.md }]}>
           <Row style={{ justifyContent: 'space-between', marginBottom: space.sm }}>
             <Txt size={18} weight="bold">{t('posOrder') + (count ? ' · ' + count : '')}</Txt>
             {count > 0 && <Touch onPress={() => { tick('light'); setCart([]); }} style={{ padding: 6 }}><Muted>{t('posClear')}</Muted></Touch>}
@@ -222,7 +227,7 @@ export default function Pos() {
       )}
       </View>
       {count > 0 && !wide && (
-        <View style={[st.bar, { paddingBottom: insets.bottom + space.md }]}>
+        <View style={[st.bar, { paddingBottom: inTab ? tabPad + Math.max(insets.bottom, 10) : insets.bottom + space.md }]}>
           <Button label={t('posPay', { n: count, x: money(subtotal, lang) })} icon="cash" onPress={() => setOpen(true)} />
         </View>
       )}
@@ -280,8 +285,6 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const { t, lang, cashier } = useSession();
   const insets = useSafeAreaInsets();
   const [ref, setRef] = useState(newRef);
-  // A cashier's discount goes through with the owner PIN, checked by the store (API 1.15).
-  const [pin, setPin] = useState('');
   // The scanned KOUB card: every paid drink is a stamp; a free drink waiting can be used on this sale.
   const [card, setCard] = useState<{ card: LoyaltyCard; code: string } | null>(null);
   const [useFree, setUseFree] = useState(false);
@@ -294,20 +297,20 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   useEffect(() => { if (shown.length && !shown.some((m) => m.key === method)) setMethod(first); }, [shown, method, first]);
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
-  // The payment number (API 1.25): the approval code on the EazyPay receipt, or the BenefitPay transaction number.
-  const [payRef, setPayRef] = useState('');
-  useEffect(() => { setPayRef(''); }, [method]);
-  const payRefClean = cleanPayRef(payRef);
-  const askRef = payRefMode !== 'off' && method !== 'cash' && method !== 'credit';
-  const refMissing = askRef && (payRefMode === 'required' ? payRefClean.length < 4 : payRefClean.length > 0 && payRefClean.length < 4);
+  // API 1.40: no payment number at all (the owner's call): the till never asks for it, and the store no longer needs it.
+  void payRefMode;
   const [given, setGiven] = useState('');
   const [who, setWho] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [done, setDone] = useState<PosReceipt | null>(null);
-  // Where to hand it over (API 1.23): in the shop, or the car, described so whoever hands it over finds it.
+  // Where to hand it over (API 1.23): in the shop, or the car: its plate and what it is (API 1.40), so whoever takes it
+  // out finds it. Staff must say where; the owner may leave it.
   const [where, setWhere] = useState<'' | 'shop' | 'car'>('');
+  const [plate, setPlate] = useState('');
   const [car, setCar] = useState('');
+  const carText = [plate.trim(), car.trim()].filter(Boolean).join(' · ');
+  const whereMissing = cashier && (!where || (where === 'car' && !plate.trim()));
   // A new basket is a new sale: the reference only survives retries of the same items.
   const basket = lines.map((l) => l.key + 'x' + l.qty).join(',');
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -317,30 +320,28 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const drinkPrices = lines.filter((l) => l.p.stamp ?? l.p.group === 'drinks').map((l) => l.p.price);
   const free = useFree && card && card.card.rewards > 0 && drinkPrices.length ? r3(Math.max(...drinkPrices)) : 0;
   const base = r3(subtotal - free);
-  const discount = r3(Math.min(base, discType === 'percent' ? (base * Math.min(100, dv)) / 100 : dv));
+  // API 1.40: only the owner gives a discount.
+  const discount = cashier ? 0 : r3(Math.min(base, discType === 'percent' ? (base * Math.min(100, dv)) / 100 : dv));
   const total = r3(base - discount);
   const cash = given.trim() ? parse(given) : null;
   const change = method === 'cash' && cash !== null ? r3(cash - total) : null;
   const short = change !== null && change < 0;
-  const needPin = cashier && discount > 0;
   const creditLeft = card?.card.credit ?? 0;
   const creditShort = method === 'credit' && creditLeft < total - 0.0005;
 
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
-      ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: dv, discount_type: discType,
+      ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: cashier ? 0 : dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
-      ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (car.trim() || t('whereCar').replace('🚗 ', '')) } : {}),
-      ...(needPin ? { owner_pin: pin.trim() } : {}),
-      ...(askRef && payRefClean ? { pay_ref: payRefClean } : {}),
+      ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
-    onError: (e) => { tick('warn'); if (needPin) setPin(''); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
+    onError: (e) => { tick('warn'); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
   });
 
   const reset = () => {
-    setRef(newRef()); setPayRef(''); setWhere(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setPin(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -394,15 +395,18 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
               </View>
 
-              {/* Every sale waits on the hand-over list under this name (API 1.19); on the cup when it has drinks. */}
-              {!who && lines.length > 0 && (
-                <TextInput value={name} onChangeText={setName} placeholder={lines.some((l) => l.p.group === 'drinks') ? t('cupName') : t('handName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
-              )}
+              {/* API 1.40: no name on the cup; the kiosk sees who took the order instead. */}
               {lines.length > 0 && (
                 <View style={{ gap: 8 }}>
                   <Txt size={14} weight="semibold">{t('whereTitle')}</Txt>
                   <Segmented<'' | 'shop' | 'car'> items={[['shop', t('whereShop')], ['car', t('whereCar')]]} value={where} onChange={(v) => setWhere(v === where ? '' : v)} />
-                  {where === 'car' && <TextInput value={car} onChangeText={setCar} placeholder={t('wherePh')} placeholderTextColor={color.faint} maxLength={36} style={input} />}
+                  {where === 'car' && (
+                    <Row gap={8}>
+                      <TextInput value={plate} onChangeText={(v) => setPlate(v.slice(0, 12))} placeholder={t('carPlate')} placeholderTextColor={color.faint} maxLength={12} keyboardType="numbers-and-punctuation" style={[input, { flex: 2, minWidth: 0, textAlign: 'center', fontSize: 18, letterSpacing: 1 }]} />
+                      <TextInput value={car} onChangeText={setCar} placeholder={t('carType')} placeholderTextColor={color.faint} maxLength={28} style={[input, { flex: 3, minWidth: 0 }]} />
+                    </Row>
+                  )}
+                  {whereMissing && <Muted size={12} tint={color.amber}>{!where ? t('whereNeeded') : t('plateNeeded')}</Muted>}
                 </View>
               )}
               {loyaltyOn && (card ? (
@@ -424,17 +428,15 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
               ))}
 
-              <Txt size={14} weight="semibold">{t('posDiscount')}</Txt>
-              <Row gap={8}>
-                <TextInput value={disc} onChangeText={setDisc} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={color.faint} style={[input, { flex: 1, minWidth: 0 }]} />
-                <Segmented<'amount' | 'percent'> items={[['amount', lang === 'ar' ? 'د.ب' : 'BHD'], ['percent', '%']]} value={discType} onChange={setDiscType} style={{ width: 140 }} />
-              </Row>
-              {needPin && (
-                <View style={{ gap: 6 }}>
-                  <Muted size={12}>{t('ownerPinForDiscount')}</Muted>
-                  <TextInput value={pin} onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry maxLength={6}
-                    placeholder={t('ownerPinEnter')} placeholderTextColor={color.faint} style={[input, { textAlign: 'center', letterSpacing: 6 }]} />
-                </View>
+              {/* API 1.40: the discount is the owner's only. */}
+              {!cashier && (
+                <>
+                  <Txt size={14} weight="semibold">{t('posDiscount')}</Txt>
+                  <Row gap={8}>
+                    <TextInput value={disc} onChangeText={setDisc} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={color.faint} style={[input, { flex: 1, minWidth: 0 }]} />
+                    <Segmented<'amount' | 'percent'> items={[['amount', lang === 'ar' ? 'د.ب' : 'BHD'], ['percent', '%']]} value={discType} onChange={setDiscType} style={{ width: 140 }} />
+                  </Row>
+                </>
               )}
 
               <Txt size={14} weight="semibold">{t('posMethod')}</Txt>
@@ -452,16 +454,6 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                   <Muted center>{t('posBenefitScan')}</Muted>
                 </View>
               ) : null}
-
-              {askRef && (
-                <View style={{ gap: 6 }}>
-                  <Txt size={14} weight="semibold">{method === 'benefit' ? t('payRefBenefit') : t('payRefCard')}{payRefMode === 'optional' ? ' · ' + t('optional') : ''}</Txt>
-                  <TextInput value={payRef} onChangeText={(v) => setPayRef(v.slice(0, 30))} autoCapitalize="characters" autoCorrect={false} maxLength={30}
-                    placeholder={method === 'benefit' ? t('payRefBenefitPh') : t('payRefCardPh')} placeholderTextColor={color.faint}
-                    style={[input, { textAlign: 'left', writingDirection: 'ltr', letterSpacing: 1 }]} />
-                  <Muted size={12}>{method === 'benefit' ? t('payRefBenefitHint') : t('payRefCardHint')}</Muted>
-                </View>
-              )}
 
               {method === 'cash' && (
                 <>
@@ -495,7 +487,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || (needPin && pin.trim().length < 4) || refMissing} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing} onPress={() => sale.mutate()} />
             </View>
           </>
         )}

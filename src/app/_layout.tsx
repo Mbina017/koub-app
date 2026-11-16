@@ -67,18 +67,18 @@ function Gate() {
   return (
     <View style={{ flex: 1, backgroundColor: color.bg, direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: 'slide_from_right' }}>
-        {/* Staff (API 1.16): the till, orders, new orders, the run and unpaid follow-ups. The rest is the owner's. */}
+        {/* Staff (API 1.40): their tabs (the kiosk, or New order and My orders) and the till. The rest is the owner's. */}
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
+        </Stack.Protected>
+        <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="order/[id]" />
           <Stack.Screen name="preorders" />
           <Stack.Screen name="run" />
           <Stack.Screen name="unpaid" />
-          <Stack.Screen name="pos" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="pos-today" />
           <Stack.Screen name="pos-close" />
-        </Stack.Protected>
-        <Stack.Protected guard={!!session && !cashier}>
           <Stack.Screen name="pos-books" />
           <Stack.Screen name="team" />
           <Stack.Screen name="team-report" />

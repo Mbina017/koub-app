@@ -9,8 +9,9 @@ import { color, shadow } from '../../lib/theme';
 import { Icon, type IconName } from '../../components/Icon';
 import { Txt, tap } from '../../components/ui';
 
-const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products' | 'numbers' | 'more' | 'work' }[] = [
+const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products' | 'numbers' | 'more' | 'work' | 'tabNewOrder' }[] = [
   { name: 'index', icon: 'home', label: 'home' },
+  { name: 'sell', icon: 'cash', label: 'tabNewOrder' },
   { name: 'work', icon: 'check', label: 'work' },
   { name: 'orders', icon: 'orders', label: 'orders' },
   { name: 'products', icon: 'products', label: 'products' },
@@ -18,8 +19,9 @@ const TABS: { name: string; icon: IconName; label: 'home' | 'orders' | 'products
   { name: 'more', icon: 'more', label: 'more' },
 ];
 
-// Staff: the work screen, orders and more. The owner keeps the five tabs and opens Work from Home.
-const STAFF_TABS = ['work', 'orders', 'more'];
+// Staff (API 1.40): outside, "New order" and "My orders"; in the kiosk, the kiosk screen alone (no bar).
+// The owner keeps the five tabs and opens Work and the till from Home.
+const STAFF_TABS = { outside: ['sell', 'work'], inside: ['work'] } as const;
 
 // The five-tab bar from the dashboard, with the "to prepare" badge on Orders.
 function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
@@ -27,23 +29,27 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const { t } = useSession();
   const session = useApiSession();
   // Shares the Home query, refreshed every minute so the badge stays current.
-  const { cashier } = useSession();
+  const { cashier, staffRole } = useSession();
   // Staff have no Home figures; their badge waits for a store that gives it to them.
   const home = useQuery({ queryKey: ['home', 'today'], queryFn: () => api.home(session, 'today'), refetchInterval: 60_000, enabled: !cashier });
   const waiting = home.data?.needs.prepare.count ?? 0;
+  // Staff with one screen (the kiosk), or still choosing where they work, have no tab bar.
+  if (cashier && staffRole !== 'outside') return null;
+  const staffTabs: readonly string[] = STAFF_TABS.outside;
   return (
     <View style={[st.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       {state.routes.map((route, i) => {
         const tab = TABS.find((x) => x.name === route.name);
         // Staff (API 1.16): orders and more; the till opens from both.
-        if (!tab || (cashier ? !STAFF_TABS.includes(tab.name) : tab.name === 'work')) return null;
+        if (!tab || (cashier ? !staffTabs.includes(tab.name) : tab.name === 'work' || tab.name === 'sell')) return null;
+        const label = cashier && tab.name === 'work' ? 'tabMyOrders' : tab.label;
         const on = state.index === i;
         return (
           <Pressable
             key={route.key}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            accessibilityLabel={t(tab.label)}
+            accessibilityLabel={t(label)}
             onPress={() => {
               const e = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
               if (!on && !e.defaultPrevented) { tap('select'); navigateToTab(route.key); }
@@ -54,7 +60,7 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
               <Icon name={tab.icon} size={25} stroke={on ? 2 : 1.6} tint={on ? color.ink : color.faint} />
               {tab.name === 'orders' && waiting > 0 && <View style={st.badge}><Txt size={10} weight="bold" tint={color.bg} center ltr>{String(waiting)}</Txt></View>}
             </View>
-            <Txt size={11} weight={on ? 'semibold' : 'medium'} tint={on ? color.ink : color.faint} center style={{ marginTop: 2 }}>{t(tab.label)}</Txt>
+            <Txt size={11} weight={on ? 'semibold' : 'medium'} tint={on ? color.ink : color.faint} center style={{ marginTop: 2 }}>{t(label)}</Txt>
           </Pressable>
         );
       })}
