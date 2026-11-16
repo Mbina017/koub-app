@@ -31,8 +31,6 @@ const r3 = (n: number) => Math.round(Number((n * 1000).toPrecision(15))) / 1000;
 type Line = { key: string; p: PosProduct; qty: number; choice: PosChoice | null; note: string };
 type CartLine = { key: string; id: number; qty: number; choice: PosChoice | null; note: string };
 const lineKey = (id: number, choice: PosChoice | null, note: string) => id + '|' + (choice?.key ?? '') + '|' + note;
-// Like the store: capitals and digits only (API 1.25).
-const cleanPayRef = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
 const newRef = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const parse = (s: string) => { const n = Number(s.replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; };
 const tick = (kind: 'light' | 'ok' | 'warn') => {
@@ -299,13 +297,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   useEffect(() => { if (shown.length && !shown.some((m) => m.key === method)) setMethod(first); }, [shown, method, first]);
   const [discType, setDiscType] = useState<'amount' | 'percent'>('amount');
   const [disc, setDisc] = useState('');
-  // API 1.40: no payment number to type any more (the store's default is off). An older store asking for it still gets
-  // it as before, so a sale never fails for a missing number.
-  const [payRef, setPayRef] = useState('');
-  useEffect(() => { setPayRef(''); }, [method]);
-  const payRefClean = cleanPayRef(payRef);
-  const askRef = payRefMode === 'required' && method !== 'cash' && method !== 'credit';
-  const refMissing = askRef && payRefClean.length < 4;
+  // API 1.40: no payment number at all (the owner's call): the till never asks for it, and the store no longer needs it.
+  void payRefMode;
   const [given, setGiven] = useState('');
   const [who, setWho] = useState(false);
   const [name, setName] = useState('');
@@ -341,7 +334,6 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: cashier ? 0 : dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
-      ...(askRef && payRefClean ? { pay_ref: payRefClean } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
@@ -349,7 +341,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   });
 
   const reset = () => {
-    setRef(newRef()); setPayRef(''); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -463,16 +455,6 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 </View>
               ) : null}
 
-              {askRef && (
-                <View style={{ gap: 6 }}>
-                  <Txt size={14} weight="semibold">{method === 'benefit' ? t('payRefBenefit') : t('payRefCard')}</Txt>
-                  <TextInput value={payRef} onChangeText={(v) => setPayRef(v.slice(0, 30))} autoCapitalize="characters" autoCorrect={false} maxLength={30}
-                    placeholder={method === 'benefit' ? t('payRefBenefitPh') : t('payRefCardPh')} placeholderTextColor={color.faint}
-                    style={[input, { textAlign: 'left', writingDirection: 'ltr', letterSpacing: 1 }]} />
-                  <Muted size={12}>{method === 'benefit' ? t('payRefBenefitHint') : t('payRefCardHint')}</Muted>
-                </View>
-              )}
-
               {method === 'cash' && (
                 <>
                   <Txt size={14} weight="semibold">{t('posCashGiven')}</Txt>
@@ -505,7 +487,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || refMissing || whereMissing} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing} onPress={() => sale.mutate()} />
             </View>
           </>
         )}
