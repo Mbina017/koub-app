@@ -193,26 +193,9 @@ export function MyOrders() {
   const open = mine.filter((x) => x.state !== 'done').sort((a, b) => Number(b.state === 'ready') - Number(a.state === 'ready'));
   const done = mine.filter((x) => x.state === 'done');
   const [showDone, setShowDone] = useState(false);
-  // A ticket that turned ready since the last look: buzz and say so (the push does the same when the app is closed).
-  const seen = useRef<Map<number, BarTicket['state']> | null>(null);
-  const [alert, setAlert] = useState<string | null>(null);
-  useEffect(() => {
-    if (!bar.data) return;
-    const prev = seen.current;
-    const now = new Map(mine.map((x) => [x.id, x.state] as const));
-    if (prev) {
-      const fresh = mine.find((x) => x.state === 'ready' && prev.get(x.id) === 'waiting');
-      if (fresh) {
-        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        setAlert(t('myReadyAlert', { n: fresh.no ? String(fresh.no) : '#' + fresh.number }));
-      }
-    }
-    seen.current = now;
-  }, [bar.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!alert) return; const h = setTimeout(() => setAlert(null), 6000); return () => clearTimeout(h); }, [alert]);
+  // The "ready" alert and the red count live in the tab bar (ReadyWatch), so they show on every screen.
   return (
-    <Screen title={t('myTitle')} right={<StaffMenu />} refreshing={bar.isRefetching} onRefresh={() => { bar.refetch(); }}
-      header={alert ? <Touch onPress={() => setAlert(null)} style={st.alert}><Txt size={16} weight="bold" tint={color.bg} center>{'✅ ' + alert}</Txt></Touch> : undefined}>
+    <Screen title={t('myTitle')} right={<StaffMenu />} refreshing={bar.isRefetching} onRefresh={() => { bar.refetch(); }}>
       {!bar.data ? [0, 1].map((i) => <Skeleton key={i} h={130} r={radius.lg} style={{ marginBottom: space.md }} />)
         : open.length === 0 ? <Empty title={t('myEmpty')} icon="cash" />
         : open.map((x) => <MyTicket key={x.id} x={x} />)}
@@ -250,6 +233,59 @@ function MyTicket({ x }: { x: BarTicket }) {
         : <Button label={t('myHanded')} icon="check" kind={ready ? 'primary' : 'light'} loading={move.isPending} onPress={() => move.mutate('done')} />}
     </View>
   );
+}
+
+// ---- Outside staff, on every screen (API 1.40): the orders they take out (theirs and online-menu ones) are checked
+// every few seconds. The "My orders" tab shows a red count of the ready ones, and when one turns ready the phone
+// buzzes (app) or chimes (browser) and a green banner says which order and where. No refresh needed.
+const mineOrOnline = (x: BarTicket) => !!x.mine || (!!x.online && !x.by);
+let audio: AudioContext | null = null;
+// Browsers only play sound after a tap: the first tap anywhere unlocks it for the chime.
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  const unlock = () => {
+    try { const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }); audio = audio ?? new (AC.AudioContext ?? AC.webkitAudioContext!)(); audio.resume().catch(() => {}); } catch { /* no sound */ }
+  };
+  window.addEventListener('pointerdown', unlock, { passive: true });
+  window.addEventListener('touchstart', unlock, { passive: true });
+}
+function chime() {
+  if (Platform.OS !== 'web') { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); return; }
+  try {
+    if (!audio) return;
+    const t0 = audio.currentTime;
+    [[880, 0], [1175, 0.18], [1568, 0.36]].forEach(([f, o]) => {
+      const osc = audio!.createOscillator(); const g = audio!.createGain();
+      osc.frequency.value = f; osc.connect(g); g.connect(audio!.destination);
+      g.gain.setValueAtTime(0.0001, t0 + o); g.gain.exponentialRampToValueAtTime(0.35, t0 + o + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + o + 0.35);
+      osc.start(t0 + o); osc.stop(t0 + o + 0.4);
+    });
+    (navigator as Navigator & { vibrate?: (p: number[]) => boolean }).vibrate?.([200, 100, 200]);
+  } catch { /* no sound */ }
+}
+export function useReadyWatch(on: boolean) {
+  const session = useApiSession();
+  const { t } = useSession();
+  const bar = useQuery({ queryKey: ['bar'], queryFn: () => api.bar(session), refetchInterval: 6_000, enabled: on, refetchIntervalInBackground: true });
+  const mine = (bar.data?.tickets ?? []).filter(mineOrOnline);
+  const ready = mine.filter((x) => x.state === 'ready').length;
+  const seen = useRef<Map<number, BarTicket['state']> | null>(null);
+  const [alert, setAlert] = useState<string | null>(null);
+  useEffect(() => {
+    if (!on || !bar.data) return;
+    const prev = seen.current;
+    if (prev) {
+      const fresh = mine.filter((x) => x.state === 'ready' && prev.get(x.id) !== 'ready' && prev.get(x.id) !== 'done');
+      if (fresh.length) {
+        chime();
+        const x = fresh[0];
+        const where = x.where ? ' · ' + x.where : '';
+        setAlert(t('myReadyAlert', { n: x.no ? String(x.no) : '#' + x.number }) + where + (fresh.length > 1 ? ' (+' + (fresh.length - 1) + ')' : ''));
+      }
+    }
+    seen.current = new Map(mine.map((x) => [x.id, x.state] as const));
+  }, [bar.data, on]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!alert) return; const h = setTimeout(() => setAlert(null), 9000); return () => clearTimeout(h); }, [alert]);
+  return { ready, alert, clear: () => setAlert(null) };
 }
 
 const st = StyleSheet.create({
