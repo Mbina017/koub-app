@@ -109,7 +109,7 @@ export default function PosInsights() {
             <View style={[st.card, { gap: 6 }]}>
               <Txt size={15} weight="semibold">{t('insPay')}</Txt>
               {Object.entries(d.methods).map(([m, v]) => (
-                <Row key={m} style={{ justifyContent: 'space-between' }}><Muted>{m === 'benefit' ? t('posBenefit') : m === 'card' ? t('posCard') : t('posCash')}</Muted><Txt size={14} weight="semibold">{money(v ?? 0, lang)}</Txt></Row>
+                <Row key={m} style={{ justifyContent: 'space-between' }}><Muted>{m === 'benefit' ? t('posBenefit') : m === 'card' ? t('posCard') : m === 'credit' ? t('posCredit') : t('posCash')}</Muted><Txt size={14} weight="semibold">{money(v ?? 0, lang)}</Txt></Row>
               ))}
               {Object.keys(d.cancels).length > 0 && (
                 <Muted size={12}>{t('insCancels') + ': ' + Object.entries(d.cancels).map(([r, n]) => t(('why_' + r) as never) + ' ' + n).join(' · ')}</Muted>

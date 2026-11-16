@@ -241,14 +241,14 @@ const demoChoices: Record<number, { key: string; label: string }[]> = {
 };
 let demoNo = 0;
 let demoOut: number[] = [];
-const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي' })[m];
+const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي', credit: en ? 'KOUB credit' : 'رصيد KOUB' })[m];
 function posCatalog(en: boolean): PosCatalog {
   return {
     products: [
       ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null, choices: demoChoices[i] ?? [], out_today: demoOut.includes(700 + i) })),
       ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
-    methods: (['card', 'benefit'] as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
+    methods: ((demoCredit.on ? ['card', 'benefit', 'credit'] : ['card', 'benefit']) as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
     loyalty: { stamps: 4, max_per_sale: 4 },
     training: true,
     benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
@@ -300,10 +300,10 @@ const demoStaff: PosStaff[] = [
   { id: 902, name: 'علي', login: 'till-1202', active: true, last_sale: null },
 ];
 function staffReport(period: string): PosStaffReport {
-  const blank = (id: number, name: string): PosStaffRow => ({ id, name, count: 0, total: 0, by_method: { cash: 0, card: 0, benefit: 0 }, discounts: 0, discount_count: 0, voids: 0, void_total: 0, refunds: 0 });
+  const blank = (id: number, name: string): PosStaffRow => ({ id, name, count: 0, total: 0, by_method: { cash: 0, card: 0, benefit: 0, credit: 0 }, discounts: 0, discount_count: 0, voids: 0, void_total: 0, refunds: 0 });
   const k = period === 'today' ? 1 : period === 'yesterday' ? 1.2 : period === '7days' ? 6 : 24;
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
-  const sara = { ...blank(901, 'سارة'), count: Math.round(14 * k), total: r3(31.6 * k), by_method: { cash: r3(12.4 * k), card: r3(15.2 * k), benefit: r3(4 * k) }, discounts: 1.5, discount_count: 1, voids: 1, void_total: 2.2 };
+  const sara = { ...blank(901, 'سارة'), count: Math.round(14 * k), total: r3(31.6 * k), by_method: { cash: r3(12.4 * k), card: r3(15.2 * k), benefit: r3(4 * k), credit: 0 }, discounts: 1.5, discount_count: 1, voids: 1, void_total: 2.2 };
   const day = new Date().toISOString().slice(0, 10);
   return {
     period: { preset: period as ShopPeriod, start: day, end: day, label: day },
@@ -323,6 +323,7 @@ function posToday(): PosToday {
 }
 // KOUB card offers (API 1.33), demo only.
 const demoOffers = { birthday: true, comeback: false };
+const demoCredit: { on: boolean; packs: [number, number][] } = { on: false, packs: [[10, 11], [20, 23], [30, 35]] };
 // Order ahead (API 1.29), demo only.
 const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
 function aheadView(): AheadSettings {
@@ -507,6 +508,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
     s.refund = { ...s.refund, state: p.state === 'none' ? 'none' : 'done', ref: p.state === 'done' ? ref : null };
     return s as T;
   }
+  if (path === '/loyalty/credit') { demoCredit.on = !!p.on; demoCredit.packs = (p.packs as [number, number][]) ?? demoCredit.packs; return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T; }
   if (path === '/loyalty/offers') { demoOffers.birthday = !!p.birthday; demoOffers.comeback = !!p.comeback; return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T; }
   if (path === '/pos/ahead') { Object.assign(demoAhead, { on: !!p.on, from: String(p.from), to: String(p.to), cap: Number(p.cap), lead: Number(p.lead) }); return aheadView() as T; }
   if (path === '/pos/stock/move') {
@@ -707,13 +709,14 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/close') return posClose() as T;
   if (path === '/pos/golive') return posGolive() as T;
   if (path === '/pos/stock') return stockView() as T;
+  if (path === '/loyalty/credit') return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T;
   if (path === '/loyalty/offers') return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T;
   if (path === '/pos/ahead') return aheadView() as T;
   if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
-  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1 } as T;
+  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1, credit: demoCredit.on ? 6.6 : null } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
   if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;

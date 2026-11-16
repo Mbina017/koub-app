@@ -1,5 +1,5 @@
 // Client for koub/v1/app. Signs in with a WordPress Application Password (HTTP Basic over HTTPS).
-import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, AheadSettings, LoyaltyOffers, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
+import type { ActionKey, BulkKey, BulkResult, Home, HomePeriod, Lang, Me, Numbers, NumbersPeriod, Order, OrderList, OrderView, PrepareView, ProductFilter, ProductList, PreorderList, ReleaseResult, StockResult, Run, ContactInput, UnpaidList, PaymentLink, PosCatalog, PosSaleInput, PosReceipt, StaffOrderInput, StaffOrder, StaffQuote, PosToday, PosCancelInput, PosGolive, AheadSettings, LoyaltyOffers, CreditSettings, StockView, StockUnit, RecipeItem, Insights, InsightsPeriod, PosCloseInput, PosCloseReport, CustomerLookup, LoyaltyCard, BarList, BarTicket, PosStaffList, PosStaffSecret, PosStaffReport, ShopBooks, ShopPeriod, ShopExpense, ShopExpenseInput, ItemsInput, GiftInstagramLink } from './types';
 import { demo, demoPost } from './demo';
 
 export type Credentials = { site: string; user: string; password: string };
@@ -137,6 +137,8 @@ export const api = {
   posRefund: (s: Session, id: number, state: 'done' | 'none', ref = '', ownerPin = '') => post<PosReceipt>(s, '/pos/sale/' + id + '/refund', { state, ref, owner_pin: ownerPin, lang: appLang }),
   // Order ahead (API 1.29), owner only.
   posAhead: (s: Session) => get<AheadSettings>(s, '/pos/ahead'),
+  credit: (s: Session) => get<CreditSettings>(s, '/loyalty/credit'),
+  creditSet: (s: Session, x: { on: boolean; packs: [number, number][] }) => post<CreditSettings>(s, '/loyalty/credit', { ...x, lang: appLang }),
   loyaltyOffers: (s: Session) => get<LoyaltyOffers>(s, '/loyalty/offers'),
   loyaltyOffersSet: (s: Session, x: { birthday: boolean; comeback: boolean }) => post<LoyaltyOffers>(s, '/loyalty/offers', { ...x, lang: appLang }),
   posAheadSet: (s: Session, x: { on: boolean; from: string; to: string; cap: number; lead: number }) => post<AheadSettings>(s, '/pos/ahead', { ...x, lang: appLang }),
