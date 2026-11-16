@@ -321,6 +321,8 @@ function posToday(): PosToday {
   return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
     sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
 }
+// KOUB card offers (API 1.33), demo only.
+const demoOffers = { birthday: true, comeback: false };
 // Order ahead (API 1.29), demo only.
 const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
 function aheadView(): AheadSettings {
@@ -505,6 +507,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
     s.refund = { ...s.refund, state: p.state === 'none' ? 'none' : 'done', ref: p.state === 'done' ? ref : null };
     return s as T;
   }
+  if (path === '/loyalty/offers') { demoOffers.birthday = !!p.birthday; demoOffers.comeback = !!p.comeback; return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T; }
   if (path === '/pos/ahead') { Object.assign(demoAhead, { on: !!p.on, from: String(p.from), to: String(p.to), cap: Number(p.cap), lead: Number(p.lead) }); return aheadView() as T; }
   if (path === '/pos/stock/move') {
     const x = demoIng[String(p.id)]; if (!x) throw new Error('not found'); const q = Number(p.qty);
@@ -704,6 +707,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/close') return posClose() as T;
   if (path === '/pos/golive') return posGolive() as T;
   if (path === '/pos/stock') return stockView() as T;
+  if (path === '/loyalty/offers') return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T;
   if (path === '/pos/ahead') return aheadView() as T;
   if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
   if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
