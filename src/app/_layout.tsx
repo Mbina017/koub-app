@@ -13,7 +13,6 @@ import { IBMPlexSansArabic_400Regular } from '@expo-google-fonts/ibm-plex-sans-a
 import { IBMPlexSansArabic_500Medium } from '@expo-google-fonts/ibm-plex-sans-arabic/500Medium';
 import { IBMPlexSansArabic_600SemiBold } from '@expo-google-fonts/ibm-plex-sans-arabic/600SemiBold';
 import { IBMPlexSansArabic_700Bold } from '@expo-google-fonts/ibm-plex-sans-arabic/700Bold';
-import { CormorantGaramond_600SemiBold } from '@expo-google-fonts/cormorant-garamond/600SemiBold';
 import { SessionProvider, useSession } from '../lib/session';
 import { color } from '../lib/theme';
 import { LockScreen } from '../components/LockScreen';
@@ -120,8 +119,13 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({ IBMPlexSansArabic_400Regular, IBMPlexSansArabic_500Medium, IBMPlexSansArabic_600SemiBold, IBMPlexSansArabic_700Bold, CormorantGaramond_600SemiBold });
-  if (!fontsLoaded) return null;
+  // The brand serif is gone (the logo is an image now), so only the Arabic family loads.
+  const [fontsLoaded, fontError] = useFonts({ IBMPlexSansArabic_400Regular, IBMPlexSansArabic_500Medium, IBMPlexSansArabic_600SemiBold, IBMPlexSansArabic_700Bold });
+  // Never a blank page waiting for fonts: on a slow first visit (koubbh.com/staff) the browser can give up on a font,
+  // and the app must still open with the system font; it switches to ours once they arrive.
+  const [late, setLate] = useState(false);
+  useEffect(() => { const h = setTimeout(() => setLate(true), 3500); return () => clearTimeout(h); }, []);
+  if (!fontsLoaded && !fontError && !late) return null;
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={client}>
