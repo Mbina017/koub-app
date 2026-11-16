@@ -109,6 +109,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean } = {}) {
   // A combined item asks which drink; anything else goes straight in. A long press on a drink opens notes.
   // Sold out today opens the sheet (to put it back); a combined item asks which drink; anything else goes straight in.
   const press = (p: PosProduct) => (p.out_today || p.choices?.length ? setOptFor(p) : add(p, { choice: null, note: '', qty: 1 }));
+  // − on a tile: one less of the product, from its latest line (a drink with choices may have several lines).
+  const less = (p: PosProduct) => {
+    const line = [...cart].reverse().find((c) => c.id === p.id && c.qty > 0);
+    if (line) setLineQty(line.key, line.qty - 1);
+  };
   // A long press opens the sheet: notes for a drink, and "sold out today" for anything.
   const hold = (p: PosProduct) => { tick('light'); setOptFor(p); };
   const outM = useMutation({
@@ -197,11 +202,18 @@ export default function Pos({ inTab = false }: { inTab?: boolean } = {}) {
               <Touch onPress={() => press(p)} onLongPress={() => hold(p)} delayLongPress={350} disabled={out && !p.out_today} style={[st.tile, inCart > 0 && st.tileOn, out && { opacity: 0.45 }]} accessibilityLabel={p.name}>
                 <View style={st.thumb}>{p.image ? <Image source={p.image} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} /> : <Icon name="products" size={28} tint={color.faint} />}</View>
                 <Txt size={14} weight="semibold" lines={2}>{p.name}</Txt>
-                <Row style={{ justifyContent: 'space-between' }}>
-                  <Txt size={14} weight="bold">{money(p.price, lang)}</Txt>
-                  <Muted size={12}>{p.out_today ? t('soldOutToday') : out ? t('posOut') : p.stock === null ? '' : t('stockN', { n: p.stock })}</Muted>
+                {p.stock !== null && !out ? <Muted size={11}>{t('stockN', { n: p.stock })}</Muted> : null}
+                <Row style={{ justifyContent: 'space-between', gap: 4 }}>
+                  <Txt size={14} weight="bold" lines={1} style={{ flexShrink: 1 }}>{money(p.price, lang)}</Txt>
+                  {!out ? (
+                    // − / + right on the tile (owner's ask): change how many without opening the order.
+                    <Row gap={2} style={{ flexShrink: 0 }}>
+                      {inCart > 0 && <Touch onPress={() => less(p)} style={st.tileStep} accessibilityLabel={'− ' + p.name}><Txt size={18} weight="bold" center>−</Txt></Touch>}
+                      {inCart > 0 && <Txt size={15} weight="bold" style={{ minWidth: 18 }} center>{inCart}</Txt>}
+                      <Touch onPress={() => press(p)} style={[st.tileStep, inCart > 0 && { backgroundColor: color.ink }]} accessibilityLabel={'+ ' + p.name}><Txt size={18} weight="bold" tint={inCart > 0 ? color.bg : color.ink} center>+</Txt></Touch>
+                    </Row>
+                  ) : <Muted size={12}>{p.out_today ? t('soldOutToday') : t('posOut')}</Muted>}
                 </Row>
-                {inCart > 0 && <View style={st.badge}><Txt size={13} weight="bold" tint={color.bg} center>{inCart}</Txt></View>}
               </Touch>
             );
           }}
@@ -505,6 +517,7 @@ const st = StyleSheet.create({
   tile: { flex: 1, gap: 6, padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface, borderWidth: 1.5, borderColor: 'transparent' },
   tileOn: { borderColor: color.ink },
   thumb: { height: 96, borderRadius: radius.md, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  tileStep: { width: 32, height: 32, borderRadius: 16, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', top: 8, end: 8, minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 6, backgroundColor: color.ink, justifyContent: 'center' },
   training: { backgroundColor: color.amber, paddingHorizontal: space.lg, paddingVertical: 10 },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
