@@ -126,7 +126,8 @@ export type Order = {
   // `buyer_sends` when the buyer sends the private link on themselves from their receipt page.
   gift: { name: string; phone: string | null; whatsapp?: string | null; call?: string | null; can_add_address?: boolean; need_phone?: boolean; country?: string; anonymous: boolean; message: string; waiting_address: boolean; instagram?: GiftInstagram | null; buyer_sends?: boolean } | null;
   // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
-  address_link?: { message: string; lang: string } | null;
+  // pay (API 1.42): the customer's payment link while a pay-by-link order is not paid yet.
+  address_link?: { message: string; lang: string; pay?: string | null } | null;
   note: string;
   items: { name: string; qty: number; total: number; image: string | null; product_id: number; parts: { name: string; qty: number }[] }[];
   totals: { discount: number; fees: { name: string; total: number }[]; shipping: number; refunded: number; total: number };
@@ -231,15 +232,21 @@ export type PosMethod = 'cash' | 'card' | 'benefit' | 'credit';
 export type StaffMethod = 'cash' | 'card' | 'benefit' | 'transfer';
 export type StaffOrderInput = {
   ref: string; lines: { id: number; qty: number }[]; name: string; phone: string;
-  fulfilment: 'delivery' | 'pickup'; country: string; method: StaffMethod; message_lang: Lang; expected_total: number | null; note: string;
+  // API 1.42: custom amounts (any amount with a short description, not a store product); 'none' when there are no
+  // products (nothing to deliver or pick up); method 'link': the customer pays online from a link the owner sends.
+  custom?: StaffCustom[];
+  fulfilment: 'delivery' | 'pickup' | 'none'; country: string; method: StaffMethod | 'link'; message_lang: Lang; expected_total: number | null; note: string;
   // API 1.18: reuse this returning customer's last delivery address (an order id from the customer lookup).
   address_from?: number;
 };
 // A returning customer by number (API 1.18).
 export type CustomerLookup = { found: boolean; phone?: string; name?: string; orders?: number; address?: { from: number; country: string; text: string } | null };
+export type StaffCustom = { label: string; amount: number };
 export type StaffOrder = {
   id: number; number: string; total: number; method_label: string; name: string; whatsapp: string; pickup: boolean;
   address_state: '' | 'awaiting_address' | 'received'; message_state: '' | 'sent' | 'waiting_for_template' | 'failed' | 'not_sent'; link: string | null; lang: string; repeat?: boolean;
+  // API 1.42: the customer's payment link while a pay-by-link order waits to be paid.
+  pay?: string | null; paid?: boolean;
 };
 export type StaffQuote = { subtotal: number; delivery: number | null; total: number | null };
 // group: shop drinks from the menu (API 1.6) or store products; older stores send no group.
