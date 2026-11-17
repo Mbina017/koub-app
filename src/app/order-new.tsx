@@ -47,7 +47,12 @@ const confirmText = (lang: string, name: string, number: string, address: string
 const payText = (lang: string, name: string, number: string, amount: string, pay: string, address: string | null) => lang === 'en'
   ? 'Hi ' + name + ', this is KOUB. Your order #' + number + ' comes to ' + amount + '. You can pay here:\n' + pay + (address ? '\n\nThen add your delivery address here:\n' + address : '')
   : 'هلا ' + name + '، معك KOUB. طلبك رقم #' + number + ' بمبلغ ' + amount + '. تقدر تدفع من هالرابط:\n' + pay + (address ? '\n\nوبعدها أضف عنوان التوصيل من هني:\n' + address : '');
-const amountOf = (v: string) => { const n = Number(v.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[,٫]/g, '.').trim()); return Number.isFinite(n) ? r3(n) : NaN; };
+// Arabic or Persian digits; "1,500" is a thousands separator, "12,5" / "12٫5" a decimal comma.
+const amountOf = (v: string) => {
+  let x = v.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬\s]/g, '');
+  x = /^\d{1,3}(,\d{3})+$/.test(x) ? x.replace(/,/g, '') : x.replace(/[,٫]/g, '.');
+  const n = x === '' ? NaN : Number(x); return Number.isFinite(n) ? r3(n) : NaN;
+};
 
 type Step = 1 | 2 | 3;
 
@@ -77,7 +82,6 @@ export default function NewOrder() {
   const [done, setDone] = useState<StaffOrder | null>(null);
   useEffect(() => { loadPrefs().then((p) => { if (p.method) setMethod(p.method); if (p.msgLang) setMsgLang(p.msgLang); if (p.pay) setPay(p.pay); }); }, []);
 
-  const hasProducts = Object.values(cart).some((q) => q > 0);
   // Returning customer: looked up once the number is long enough, for the delivery country.
   const digits = phone.replace(/\D/g, '');
   const [lookFor, setLookFor] = useState('');
@@ -85,7 +89,6 @@ export default function NewOrder() {
   const who = useQuery({ queryKey: ['customer', lookFor, country], queryFn: () => api.customer(session, lookFor, country), enabled: lookFor.length >= 8, retry: false });
   const known = who.data?.found ? who.data : null;
   useEffect(() => { if (known?.name && !nameTouched) setName(known.name); }, [known?.name, nameTouched]);
-  const saved = known?.address && known.address.country === country && fulfilment === 'delivery' && hasProducts ? known.address : null;
 
   // Products only: the kiosk drinks menu is sold at the till, not delivered.
   const products = (catalog.data?.products ?? []).filter((p) => p.group !== 'drinks');
@@ -96,6 +99,7 @@ export default function NewOrder() {
   const customSum = r3(custom.reduce((a, c) => a + c.amount, 0));
   // Custom amounts only: nothing to deliver or pick up.
   const ship: 'delivery' | 'pickup' | 'none' = lines.length ? fulfilment : 'none';
+  const saved = known?.address && known.address.country === country && ship === 'delivery' ? known.address : null;
   const shown = products.filter((p) => !search.trim() || (p.name + ' ' + p.sku).toLowerCase().includes(search.trim().toLowerCase()));
   // A different basket is a different order: the reference only survives retries of the same one.
   useEffect(() => { if (!done) setRef(newRef()); }, [basket, done]);

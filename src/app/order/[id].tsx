@@ -374,7 +374,10 @@ function AddressLink({ o }: { o: Order }) {
   const qc = useQueryClient();
   const l = o.address_link!;
   const first = o.customer.name.split(' ')[0];
-  const text = (url: string) => l.lang === 'en'
+  // Pay by link, not paid yet: never "paid"; the payment link comes first.
+  const text = (url: string) => l.pay ? (l.lang === 'en'
+    ? 'Hi ' + first + ', this is KOUB. Your order #' + o.number + ' is waiting for payment. You can pay here:\n' + l.pay + '\n\nThen add your delivery address here:\n' + url
+    : 'هلا ' + first + '، معك KOUB. طلبك رقم #' + o.number + ' ينتظر الدفع. تقدر تدفع من هالرابط:\n' + l.pay + '\n\nوبعدها أضف عنوان التوصيل من هني:\n' + url) : l.lang === 'en'
     ? 'Hi ' + first + ', this is KOUB. Your order #' + o.number + ' is confirmed and paid. Please add your delivery address here:\n' + url
     : 'هلا ' + first + '، معك KOUB. طلبك رقم #' + o.number + ' تأكد وانحسب مدفوع. أضف عنوان التوصيل من هالرابط:\n' + url;
   // The store keeps no copy of a link, so each send makes a fresh one (any older link stops working).

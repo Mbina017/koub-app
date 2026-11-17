@@ -126,7 +126,8 @@ export type Order = {
   // `buyer_sends` when the buyer sends the private link on themselves from their receipt page.
   gift: { name: string; phone: string | null; whatsapp?: string | null; call?: string | null; can_add_address?: boolean; need_phone?: boolean; country?: string; anonymous: boolean; message: string; waiting_address: boolean; instagram?: GiftInstagram | null; buyer_sends?: boolean } | null;
   // API 1.8: an order staff placed for the customer, waiting for them to add the address from the link.
-  address_link?: { message: string; lang: string } | null;
+  // pay (API 1.42): the customer's payment link while a pay-by-link order is not paid yet.
+  address_link?: { message: string; lang: string; pay?: string | null } | null;
   note: string;
   items: { name: string; qty: number; total: number; image: string | null; product_id: number; parts: { name: string; qty: number }[] }[];
   totals: { discount: number; fees: { name: string; total: number }[]; shipping: number; refunded: number; total: number };
