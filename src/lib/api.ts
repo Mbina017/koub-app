@@ -182,7 +182,7 @@ export const api = {
   posExpenseAdd: (s: Session, e: ShopExpenseInput) => post<{ entry: ShopExpense; repeat?: boolean }>(s, '/pos/expenses', { ...e, lang: appLang }),
   posExpenseRemove: (s: Session, date: string, id: string) => post<{ ok: boolean }>(s, '/pos/expenses/remove', { date, id, lang: appLang }),
   // Orders staff place for a customer (API 1.8). The order carries its own `ref`, so sending it again never makes two.
-  staffQuote: (s: Session, q: Pick<StaffOrderInput, 'lines' | 'fulfilment' | 'country'>) => post<StaffQuote>(s, '/orders/quote', { ...q, lang: appLang }),
+  staffQuote: (s: Session, q: Pick<StaffOrderInput, 'lines' | 'fulfilment' | 'country' | 'custom'>) => post<StaffQuote>(s, '/orders/quote', { ...q, lang: appLang }),
   staffOrder: (s: Session, o: StaffOrderInput) => post<StaffOrder>(s, '/orders/create', { ...o, lang: appLang }),
   // A fresh link (the old one stops working): `send` has the store message it; otherwise staff send it themselves.
   staffResendLink: (s: Session, id: number, send = true) => post<StaffOrder>(s, '/orders/' + id + '/address-link', { send, lang: appLang }),
