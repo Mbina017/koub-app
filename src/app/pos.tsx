@@ -4,7 +4,7 @@
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,8 +14,6 @@ import { api, ApiError } from '../lib/api';
 import { useApiSession, useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
 import { money } from '../lib/format';
-import { sharePdf } from '../lib/print';
-import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
 import type { LoyaltyCard, PosChoice, PayRefMode, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
 import { PosOptions, type PosPick } from '../components/PosOptions';
@@ -294,7 +292,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   setLineQty: (key: string, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
-  const { t, lang, cashier } = useSession();
+  const { t, lang, cashier, me } = useSession();
   const insets = useSafeAreaInsets();
   const [ref, setRef] = useState(newRef);
   // The scanned KOUB card: every paid drink is a stamp; a free drink waiting can be used on this sale.
@@ -315,6 +313,12 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const [who, setWho] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  // API 1.41: no card to scan: the customer's number puts the stamps on their card (or a new one).
+  const [join, setJoin] = useState(false);
+  const joining = loyaltyOn && !card && join;
+  // A Bahrain number of 8 digits, or a full international one (10 to 15 digits), as the store accepts.
+  const joinDigits = phone.replace(/\D/g, '').replace(/^0+/, '').length;
+  const joinMissing = joining && joinDigits !== 8 && (joinDigits < 10 || joinDigits > 15);
   const [done, setDone] = useState<PosReceipt | null>(null);
   // Where to hand it over (API 1.23): in the shop, or the car: its plate and what it is (API 1.40), so whoever takes it
   // out finds it. Staff must say where; the owner may leave it.
@@ -322,7 +326,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const [plate, setPlate] = useState('');
   const [car, setCar] = useState('');
   const carText = [plate.trim(), car.trim()].filter(Boolean).join(' · ');
-  const whereMissing = cashier && (!where || (where === 'car' && !plate.trim()));
+  // Every sale says where it is handed over, first: the rest of checkout (card, payment) shows once it is chosen.
+  const whereMissing = !where || (where === 'car' && !plate.trim());
+  const whereGate = lines.length > 0 && !where;
   // A new basket is a new sale: the reference only survives retries of the same items.
   const basket = lines.map((l) => l.key + 'x' + l.qty).join(',');
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,13 +353,14 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
+      ...(joining ? { loyalty_join: true } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
     onError: (e) => { tick('warn'); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
   });
 
   const reset = () => {
-    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setJoin(false); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -381,22 +388,14 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Muted center>{[done.loyalty.redeemed ? t('loyUsed') : '', done.loyalty.added > 0 ? t('loyAdded', { n: done.loyalty.added, name: done.loyalty.name }) : '', done.loyalty.new_rewards > 0 ? t('loyNowFree', { name: done.loyalty.name }) : '', t('loyStamps', { s: done.loyalty.stamps, of: done.loyalty.of })].filter(Boolean).join(' · ')}</Muted>
               )}
               {done.method === 'credit' && done.loyalty?.credit != null && <Muted center>{t('creditLeft', { x: money(done.loyalty.credit, lang) })}</Muted>}
+              {done.loyalty?.link && !done.loyalty.failed && (
+                <Muted center>{[done.loyalty.joined ? t('loyJoined', { name: done.loyalty.name }) : '', me?.whatsapp_automation ? t('loyMsgQueued') : ''].filter(Boolean).join(' · ')}</Muted>
+              )}
               {done.change !== null && done.change > 0 && (
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
             </View>
-            {done.track && done.status !== 'cancelled' && (
-              // The customer's own page (API 1.27): they scan it and see when the order is ready.
-              <View style={[st.card, { alignItems: 'center', gap: 8 }]}>
-                <View style={{ padding: 8, backgroundColor: '#FFFFFF', borderRadius: radius.md }}><QrCode value={done.track} size={170} /></View>
-                <Muted center>{t('trackScan')}</Muted>
-              </View>
-            )}
-            <Button label={t('posShareReceipt')} icon="print" kind="light" onPress={() => sharePdf(receiptHtml(done, lang), 'KOUB-' + done.number, RECEIPT_SIZE).catch(() => {})} />
-            {done.whatsapp && (
-              <Button label={t('posWhatsappReceipt')} icon="whatsapp" kind="light"
-                onPress={() => Linking.openURL('https://wa.me/' + done.whatsapp + '?text=' + encodeURIComponent(receiptText(done, lang))).catch(() => {})} />
-            )}
+            {/* The customer hears from KOUB's WhatsApp (API 1.41); no receipt or tracking code to hand over here. */}
             <Button label={t('posNewSale')} icon="cash" onPress={() => { reset(); onClose(); }} />
           </ScrollView>
         ) : (
@@ -409,8 +408,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
 
               {/* API 1.40: no name on the cup; the kiosk sees who took the order instead. */}
               {lines.length > 0 && (
-                <View style={{ gap: 8 }}>
-                  <Txt size={14} weight="semibold">{t('whereTitle')}</Txt>
+                <View style={[{ gap: 8 }, whereGate && st.whereAsk]}>
+                  <Txt size={whereGate ? 17 : 14} weight={whereGate ? 'bold' : 'semibold'}>{t('whereTitle')}</Txt>
                   <Segmented<'' | 'shop' | 'car'> items={[['shop', t('whereShop')], ['car', t('whereCar')]]} value={where} onChange={(v) => setWhere(v === where ? '' : v)} />
                   {where === 'car' && (
                     <Row gap={8}>
@@ -418,9 +417,10 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                       <TextInput value={car} onChangeText={setCar} placeholder={t('carType')} placeholderTextColor={color.faint} maxLength={28} style={[input, { flex: 3, minWidth: 0 }]} />
                     </Row>
                   )}
-                  {whereMissing && <Muted size={12} tint={color.amber}>{!where ? t('whereNeeded') : t('plateNeeded')}</Muted>}
+                  {whereGate ? <Muted size={13}>{t('whereFirst')}</Muted> : whereMissing && <Muted size={12} tint={color.amber}>{t('plateNeeded')}</Muted>}
                 </View>
               )}
+              {!whereGate && (<>
               {loyaltyOn && (card ? (
                 <View style={[st.card, { gap: 8 }]}>
                   <Row style={{ justifyContent: 'space-between' }}>
@@ -437,7 +437,22 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                   )}
                 </View>
               ) : (
-                <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
+                <View style={{ gap: 8 }}>
+                  <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
+                  {join ? (
+                    <View style={[st.card, { gap: 8 }]}>
+                      <Row style={{ justifyContent: 'space-between' }}>
+                        <Txt size={15} weight="semibold" style={{ flex: 1 }}>{t('loyCard')}</Txt>
+                        <Touch onPress={() => setJoin(false)} style={st.iconBtn} accessibilityLabel={t('loyJoinOff')}><Icon name="close" size={18} /></Touch>
+                      </Row>
+                      <TextInput value={phone} onChangeText={setPhone} placeholder={t('loyJoinPhone')} placeholderTextColor={color.faint} keyboardType="phone-pad" maxLength={20} style={[input, { textAlign: 'left', writingDirection: 'ltr' }]} />
+                      <TextInput value={name} onChangeText={setName} placeholder={t('loyJoinName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+                      <Muted size={12}>{t('loyJoinHint')}</Muted>
+                    </View>
+                  ) : (
+                    <Touch onPress={() => setJoin(true)} style={{ paddingVertical: 4, alignSelf: 'center' }}><Muted>{t('loyJoin')}</Muted></Touch>
+                  )}
+                </View>
               ))}
 
               {/* API 1.40: the discount is the owner's only. */}
@@ -482,7 +497,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 </>
               )}
 
-              {who ? (
+              {joining ? null : who ? (
                 <View style={{ gap: 8 }}>
                   <Txt size={14} weight="semibold">{t('posCustomer')}</Txt>
                   <TextInput value={name} onChangeText={setName} placeholder={t('posCustomerName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
@@ -491,6 +506,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               ) : (
                 <Touch onPress={() => setWho(true)} style={{ paddingVertical: 6 }}><Muted>{'+ ' + t('posAddCustomer')}</Muted></Touch>
               )}
+              </>)}
             </ScrollView>
             <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
               {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
@@ -499,7 +515,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing || joinMissing} onPress={() => sale.mutate()} />
+              {joinMissing && <Muted size={12} tint={color.amber} center>{t('loyJoinNeed')}</Muted>}
             </View>
           </>
         )}
@@ -522,6 +539,8 @@ const st = StyleSheet.create({
   training: { backgroundColor: color.amber, paddingHorizontal: space.lg, paddingVertical: 10 },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
+  // The hand-over choice while nothing is chosen: framed, so staff see it is the first step.
+  whereAsk: { padding: space.md, borderRadius: radius.lg, borderWidth: 2, borderColor: color.amber, backgroundColor: color.surface },
   sep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   step: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, justifyContent: 'center' },
   input: { minHeight: 46, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, backgroundColor: color.surface, paddingHorizontal: 12, fontSize: 16, color: color.ink },
