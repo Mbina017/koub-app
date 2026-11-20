@@ -328,7 +328,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const [plate, setPlate] = useState('');
   const [car, setCar] = useState('');
   const carText = [plate.trim(), car.trim()].filter(Boolean).join(' · ');
-  const whereMissing = cashier && (!where || (where === 'car' && !plate.trim()));
+  // Every sale says where it is handed over, first: the rest of checkout (card, payment) shows once it is chosen.
+  const whereMissing = !where || (where === 'car' && !plate.trim());
+  const whereGate = lines.length > 0 && !where;
   // A new basket is a new sale: the reference only survives retries of the same items.
   const basket = lines.map((l) => l.key + 'x' + l.qty).join(',');
   useEffect(() => { if (!done) setRef(newRef()); }, [basket]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -424,8 +426,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
 
               {/* API 1.40: no name on the cup; the kiosk sees who took the order instead. */}
               {lines.length > 0 && (
-                <View style={{ gap: 8 }}>
-                  <Txt size={14} weight="semibold">{t('whereTitle')}</Txt>
+                <View style={[{ gap: 8 }, whereGate && st.whereAsk]}>
+                  <Txt size={whereGate ? 17 : 14} weight={whereGate ? 'bold' : 'semibold'}>{t('whereTitle')}</Txt>
                   <Segmented<'' | 'shop' | 'car'> items={[['shop', t('whereShop')], ['car', t('whereCar')]]} value={where} onChange={(v) => setWhere(v === where ? '' : v)} />
                   {where === 'car' && (
                     <Row gap={8}>
@@ -433,9 +435,10 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                       <TextInput value={car} onChangeText={setCar} placeholder={t('carType')} placeholderTextColor={color.faint} maxLength={28} style={[input, { flex: 3, minWidth: 0 }]} />
                     </Row>
                   )}
-                  {whereMissing && <Muted size={12} tint={color.amber}>{!where ? t('whereNeeded') : t('plateNeeded')}</Muted>}
+                  {whereGate ? <Muted size={13}>{t('whereFirst')}</Muted> : whereMissing && <Muted size={12} tint={color.amber}>{t('plateNeeded')}</Muted>}
                 </View>
               )}
+              {!whereGate && (<>
               {loyaltyOn && (card ? (
                 <View style={[st.card, { gap: 8 }]}>
                   <Row style={{ justifyContent: 'space-between' }}>
@@ -521,6 +524,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               ) : (
                 <Touch onPress={() => setWho(true)} style={{ paddingVertical: 6 }}><Muted>{'+ ' + t('posAddCustomer')}</Muted></Touch>
               )}
+              </>)}
             </ScrollView>
             <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
               {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
@@ -553,6 +557,8 @@ const st = StyleSheet.create({
   training: { backgroundColor: color.amber, paddingHorizontal: space.lg, paddingVertical: 10 },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   card: { padding: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
+  // The hand-over choice while nothing is chosen: framed, so staff see it is the first step.
+  whereAsk: { padding: space.md, borderRadius: radius.lg, borderWidth: 2, borderColor: color.amber, backgroundColor: color.surface },
   sep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.line },
   step: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, justifyContent: 'center' },
   input: { minHeight: 46, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, backgroundColor: color.surface, paddingHorizontal: 12, fontSize: 16, color: color.ink },
