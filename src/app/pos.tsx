@@ -298,6 +298,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   // The scanned KOUB card: every paid drink is a stamp; a free drink waiting can be used on this sale.
   const [card, setCard] = useState<{ card: LoyaltyCard; code: string } | null>(null);
   const [useFree, setUseFree] = useState(false);
+  const [useOffer, setUseOffer] = useState(true);
   const [scan, setScan] = useState(false);
   // The store says which methods it takes (API 1.21: card machine and BenefitPay); the first is the default.
   const first = (methods[0]?.key ?? 'card') as PosMethod;
@@ -337,9 +338,13 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const drinkPrices = lines.filter((l) => l.p.stamp ?? l.p.group === 'drinks').map((l) => l.p.price);
   const free = useFree && card && card.card.rewards > 0 && drinkPrices.length ? r3(Math.max(...drinkPrices)) : 0;
   const base = r3(subtotal - free);
+  // API 1.43: the card's discount (comeback offer), on what is left after the free drink. Used by default once the
+  // card is scanned; it never goes with a shop discount, so the owner's discount is set aside while it is on.
+  const offerPct = useOffer && card?.card.offer ? card.card.offer.pct : 0;
+  const offerOff = offerPct > 0 ? r3(Math.min(base, (base * offerPct) / 100)) : 0;
   // API 1.40: only the owner gives a discount.
-  const discount = cashier ? 0 : r3(Math.min(base, discType === 'percent' ? (base * Math.min(100, dv)) / 100 : dv));
-  const total = r3(base - discount);
+  const discount = cashier || offerOff > 0 ? 0 : r3(Math.min(base, discType === 'percent' ? (base * Math.min(100, dv)) / 100 : dv));
+  const total = r3(base - offerOff - discount);
   const cash = given.trim() ? parse(given) : null;
   const change = method === 'cash' && cash !== null ? r3(cash - total) : null;
   const short = change !== null && change < 0;
@@ -348,12 +353,12 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
 
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
-      ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: cashier ? 0 : dv, discount_type: discType,
+      ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: cashier || offerOff > 0 ? 0 : dv, discount_type: discType,
       cash_given: method === 'cash' ? cash : null, expected_total: total,
       // With cards on, the number and name are the card box's: a scanned card hides it, so they are not sent then.
       name: loyaltyOn && card ? '' : name.trim(), phone: loyaltyOn && card ? '' : phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
-      ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
+      ...(card ? { loyalty: card.code, loyalty_redeem: free > 0, ...(offerOff > 0 ? { loyalty_offer: true } : {}) } : {}),
       ...(joining ? { loyalty_join: true } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
@@ -361,7 +366,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   });
 
   const reset = () => {
-    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setUseOffer(true); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -429,8 +434,13 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                       <Txt size={15} weight="semibold">{t('loyCard') + ' · ' + card.card.name}</Txt>
                       <Muted size={12}>{[card.card.code, t('loyStamps', { s: card.card.stamps, of: card.card.of }), card.card.rewards > 0 ? t('loyFree', { n: card.card.rewards }) : ''].filter(Boolean).join(' · ')}</Muted>
                     </View>
-                    <Touch onPress={() => { setCard(null); setUseFree(false); }} style={st.iconBtn} accessibilityLabel={t('loyRemove')}><Icon name="close" size={18} /></Touch>
+                    <Touch onPress={() => { setCard(null); setUseFree(false); setUseOffer(true); }} style={st.iconBtn} accessibilityLabel={t('loyRemove')}><Icon name="close" size={18} /></Touch>
                   </Row>
+                  {!!card.card.offer && (
+                    <Touch onPress={() => setUseOffer(!useOffer)} style={[st.pill, { alignSelf: 'flex-start' }, useOffer && { backgroundColor: color.ink }]}>
+                      <Txt size={13} weight="semibold" tint={useOffer ? color.bg : color.ink}>{(useOffer ? '✓ ' : '') + t('loyUseOffer', { n: card.card.offer.pct })}</Txt>
+                    </Touch>
+                  )}
                   {card.card.rewards > 0 && (
                     <Touch onPress={() => (drinkPrices.length ? setUseFree(!useFree) : showMessage(t('loyCard'), t('loyNeedDrink')))} style={[st.pill, { alignSelf: 'flex-start' }, useFree && { backgroundColor: color.ink }]}>
                       <Txt size={13} weight="semibold" tint={useFree ? color.bg : color.ink}>{(useFree ? '✓ ' : '') + t('loyUseFree')}</Txt>
@@ -451,7 +461,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               ))}
 
               {/* API 1.40: the discount is the owner's only. */}
-              {!cashier && (
+              {!cashier && offerOff > 0 && <Muted size={12}>{t('loyOfferNoDiscount')}</Muted>}
+              {!cashier && offerOff === 0 && (
                 <>
                   <Txt size={14} weight="semibold">{t('posDiscount')}</Txt>
                   <Row gap={8}>
@@ -505,6 +516,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
             </ScrollView>
             <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
               {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
+              {offerOff > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyOfferLine', { n: offerPct })}</Muted><Muted>{'−' + money(offerOff, lang)}</Muted></Row>}
               {discount > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('posDiscount')}</Muted><Muted>{'−' + money(discount, lang)}</Muted></Row>}
               <Row style={{ justifyContent: 'space-between' }}>
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>

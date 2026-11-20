@@ -267,7 +267,8 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
   const sub = r3(lines.reduce((s, l) => s + l.row[1] * l.qty, 0));
   const value = Number(p.discount) || 0;
-  const discount = r3(Math.min(sub, p.discount_type === 'percent' ? (sub * Math.min(100, value)) / 100 : value));
+  // API 1.43: the card's 30% (comeback offer) instead of a shop discount.
+  const discount = p.loyalty_offer ? r3(sub * 0.3) : r3(Math.min(sub, p.discount_type === 'percent' ? (sub * Math.min(100, value)) / 100 : value));
   const total = r3(sub - discount);
   const method = p.method as PosMethod;
   const given = method === 'cash' && p.cash_given != null ? Number(p.cash_given) : null;
@@ -549,7 +550,7 @@ export async function demoPost<T>(path: string, p: Record<string, unknown>): Pro
     return s as T;
   }
   if (path === '/loyalty/credit') { demoCredit.on = !!p.on; demoCredit.packs = (p.packs as [number, number][]) ?? demoCredit.packs; return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T; }
-  if (path === '/loyalty/offers') { demoOffers.birthday = !!p.birthday; demoOffers.comeback = !!p.comeback; return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T; }
+  if (path === '/loyalty/offers') { demoOffers.birthday = !!p.birthday; demoOffers.comeback = !!p.comeback; return { ...demoOffers, birthdays: 12, comeback_days: 90, comeback_pct: 30, comeback_valid_days: 30 } as T; }
   if (path === '/feedback') {
     const u = String(p.review_url ?? '').trim();
     if (u && !/^https:\/\/(www\.)?(g\.page|google\.[a-z.]+|search\.google\.com|maps\.app\.goo\.gl|goo\.gl)\//i.test(u)) throw new Error(p.lang === 'en' ? 'Paste the "Ask for reviews" link from your Google Business Profile.' : 'حط رابط "اطلب تقييمات" من ملفك في Google Business.');
@@ -755,7 +756,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/pos/golive') return posGolive() as T;
   if (path === '/pos/stock') return stockView() as T;
   if (path === '/loyalty/credit') return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T;
-  if (path === '/loyalty/offers') return { ...demoOffers, birthdays: 12, comeback_days: 90 } as T;
+  if (path === '/loyalty/offers') return { ...demoOffers, birthdays: 12, comeback_days: 90, comeback_pct: 30, comeback_valid_days: 30 } as T;
   if (path === '/pos/ahead') return aheadView() as T;
   if (path === '/feedback') return feedbackView() as T;
   if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
@@ -763,7 +764,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar/pickup') return { orders: demoPickups.map((x) => ({ ...x })) } as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
-  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 5, need: 2, rewards: 1, credit: demoCredit.on ? 6.6 : null } as T;
+  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 5, need: 2, rewards: 1, credit: demoCredit.on ? 6.6 : null, offer: { pct: 30, why: 'comeback', until: new Date(Date.now() + 20 * 864e5).toISOString() } } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
   if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;

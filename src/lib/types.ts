@@ -294,8 +294,10 @@ export type BarList = { tickets: BarTicket[]; waiting: number };
 export type PickupOrder = { id: number; number: string; lines: { name: string; qty: number }[]; cod: boolean; collect: number | null; at: string | null };
 export type PickupList = { orders: PickupOrder[] };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
-export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number; credit?: number | null };
-export type ReceiptLoyalty = { credit?: number | null; code: string; no?: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number;
+// API 1.43: offer is a discount waiting on the card (the comeback offer), used by scanning the card.
+export type LoyaltyOffer = { pct: number; why: string; until: string | null };
+export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number; credit?: number | null; offer?: LoyaltyOffer | null };
+export type ReceiptLoyalty = { credit?: number | null; code: string; no?: string; name: string; added: number; redeemed: boolean; offer_used?: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number;
   // API 1.41: the card was reached by the customer's number (then code is '' and credit null: a typed number never
   // shows them). joined: a new card; link (new cards only): its page, to share if WhatsApp did not send it;
   // message: the store's WhatsApp, 'queued' when the sale answers.
@@ -358,7 +360,7 @@ export type RefundOwed = { id: number; no: number | null; number: string; date: 
 // API 1.33: KOUB card offers (owner).
 // API 1.34: KOUB credit (owner): switch, packs [pay, get], and what is on cards / sold this month.
 export type CreditSettings = { on: boolean; packs: [number, number][]; outstanding: number; cards: number; month_paid: number; month_credit: number };
-export type LoyaltyOffers = { birthday: boolean; comeback: boolean; birthdays: number; comeback_days: number };
+export type LoyaltyOffers = { birthday: boolean; comeback: boolean; birthdays: number; comeback_days: number; comeback_pct?: number; comeback_valid_days?: number };
 export type AheadSettings = { on: boolean; from: string; to: string; cap: number; lead: number; slots: { t: number; label: string; free: number }[]; url: string };
 // API 1.39: customer ratings after pickup (owner). Anonymous ones have no name or number.
 export type FeedbackItem = { at: string; stars: number; note: string; anon: boolean; name: string; no: number | null };
