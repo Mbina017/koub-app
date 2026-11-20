@@ -296,8 +296,9 @@ export type PickupList = { orders: PickupOrder[] };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
 export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number; credit?: number | null };
 export type ReceiptLoyalty = { credit?: number | null; code: string; no?: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number;
-  // API 1.41: the card was reached by the customer's number. joined: a new card; link: the card's page (to share if
-  // WhatsApp did not send it); message: the store's WhatsApp, 'queued' when the sale answers.
+  // API 1.41: the card was reached by the customer's number (then code is '' and credit null: a typed number never
+  // shows them). joined: a new card; link (new cards only): its page, to share if WhatsApp did not send it;
+  // message: the store's WhatsApp, 'queued' when the sale answers.
   joined?: boolean; link?: string; message?: string };
 export type PosSaleInput = {
   ref: string;

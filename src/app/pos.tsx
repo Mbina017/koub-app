@@ -318,7 +318,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   // API 1.41: no card to scan: the customer's number puts the stamps on their card (or a new one).
   const [join, setJoin] = useState(false);
   const joining = loyaltyOn && !card && join;
-  const joinMissing = joining && phone.replace(/\D/g, '').length < 8;
+  // A Bahrain number of 8 digits, or a full international one (10 to 15 digits), as the store accepts.
+  const joinDigits = phone.replace(/\D/g, '').replace(/^0+/, '').length;
+  const joinMissing = joining && joinDigits !== 8 && (joinDigits < 10 || joinDigits > 15);
   const [done, setDone] = useState<PosReceipt | null>(null);
   // Where to hand it over (API 1.23): in the shop, or the car: its plate and what it is (API 1.40), so whoever takes it
   // out finds it. Staff must say where; the owner may leave it.
