@@ -295,7 +295,10 @@ export type PickupOrder = { id: number; number: string; lines: { name: string; q
 export type PickupList = { orders: PickupOrder[] };
 // A KOUB loyalty card as the till sees it (scanned QR or typed code).
 export type LoyaltyCard = { id: number; code: string; name: string; stamps: number; of: number; need: number; rewards: number; credit?: number | null };
-export type ReceiptLoyalty = { credit?: number | null; code: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number };
+export type ReceiptLoyalty = { credit?: number | null; code: string; no?: string; name: string; added: number; redeemed: boolean; new_rewards: number; failed: boolean; reversed: boolean; stamps: number; of: number; need: number; rewards: number;
+  // API 1.41: the card was reached by the customer's number. joined: a new card; link: the card's page (to share if
+  // WhatsApp did not send it); message: the store's WhatsApp, 'queued' when the sale answers.
+  joined?: boolean; link?: string; message?: string };
 export type PosSaleInput = {
   ref: string;
   // choice / note (API 1.22): the drink picked for a combined item, and a short note for the barista.
@@ -315,6 +318,8 @@ export type PosSaleInput = {
   // The scanned KOUB card: paid drinks become stamps; redeem uses a free drink waiting on it.
   loyalty?: string;
   loyalty_redeem?: boolean;
+  // API 1.41: no card scanned: the customer's number (phone) gets the stamps on their card, or a new one.
+  loyalty_join?: boolean;
   // API 1.25: the approval code on the EazyPay receipt, or the BenefitPay transaction number.
   pay_ref?: string;
 };

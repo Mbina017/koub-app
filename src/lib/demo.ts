@@ -282,6 +282,12 @@ function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
     pay_ref: p.pay_ref ? String(p.pay_ref) : null,
     track: 'https://koubbh.com/o/DEMO' + String(1e7 + posSales.length).slice(0, 8),
   };
+  // Demo of API 1.41: a number with no card scanned gets a new card with this sale's drinks as stamps.
+  if (p.loyalty_join && !p.loyalty) {
+    const drinks = Math.min(5, lines.filter((l) => l.id >= 700).reduce((n, l) => n + l.qty, 0));
+    sale.loyalty = { code: 'DEMO-0001', no: 'KOUB-0003', name: String(p.name ?? '') || (en ? 'KOUB guest' : 'ضيف KOUB'), added: drinks, redeemed: false, new_rewards: drinks >= 5 ? 1 : 0, failed: false, reversed: false,
+      stamps: drinks % 5, of: 5, need: 5 - (drinks % 5), rewards: drinks >= 5 ? 1 : 0, joined: true, message: 'queued', link: 'https://koubbh.com/loyalty/' };
+  }
   posSales.unshift(sale);
   return sale;
 }

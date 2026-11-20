@@ -294,7 +294,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   setLineQty: (key: string, qty: number) => void; onClose: () => void; onDone: () => void;
 }) {
   const session = useApiSession();
-  const { t, lang, cashier } = useSession();
+  const { t, lang, cashier, me } = useSession();
   const insets = useSafeAreaInsets();
   const [ref, setRef] = useState(newRef);
   // The scanned KOUB card: every paid drink is a stamp; a free drink waiting can be used on this sale.
@@ -315,6 +315,10 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const [who, setWho] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  // API 1.41: no card to scan: the customer's number puts the stamps on their card (or a new one).
+  const [join, setJoin] = useState(false);
+  const joining = loyaltyOn && !card && join;
+  const joinMissing = joining && phone.replace(/\D/g, '').length < 8;
   const [done, setDone] = useState<PosReceipt | null>(null);
   // Where to hand it over (API 1.23): in the shop, or the car: its plate and what it is (API 1.40), so whoever takes it
   // out finds it. Staff must say where; the owner may leave it.
@@ -347,13 +351,14 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
       cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
+      ...(joining ? { loyalty_join: true } : {}),
     }),
     onSuccess: (r) => { tick('ok'); setDone(r); onDone(); },
     onError: (e) => { tick('warn'); showMessage(t('posNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e instanceof ApiError && e.kind === 'network' ? t('posNetwork') : e.message); },
   });
 
   const reset = () => {
-    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setJoin(false); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -381,6 +386,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Muted center>{[done.loyalty.redeemed ? t('loyUsed') : '', done.loyalty.added > 0 ? t('loyAdded', { n: done.loyalty.added, name: done.loyalty.name }) : '', done.loyalty.new_rewards > 0 ? t('loyNowFree', { name: done.loyalty.name }) : '', t('loyStamps', { s: done.loyalty.stamps, of: done.loyalty.of })].filter(Boolean).join(' · ')}</Muted>
               )}
               {done.method === 'credit' && done.loyalty?.credit != null && <Muted center>{t('creditLeft', { x: money(done.loyalty.credit, lang) })}</Muted>}
+              {done.loyalty?.link && !done.loyalty.failed && (
+                <Muted center>{[done.loyalty.joined ? t('loyJoined', { name: done.loyalty.name }) : '', me?.whatsapp_automation ? t('loyMsgQueued') : ''].filter(Boolean).join(' · ')}</Muted>
+              )}
               {done.change !== null && done.change > 0 && (
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
@@ -393,6 +401,11 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               </View>
             )}
             <Button label={t('posShareReceipt')} icon="print" kind="light" onPress={() => sharePdf(receiptHtml(done, lang), 'KOUB-' + done.number, RECEIPT_SIZE).catch(() => {})} />
+            {done.whatsapp && done.loyalty?.link && (
+              // Backup for the store's message (template waiting, WhatsApp off): staff send the card link themselves.
+              <Button label={t('loySendLink')} icon="gift" kind="light"
+                onPress={() => Linking.openURL('https://wa.me/' + done.whatsapp + '?text=' + encodeURIComponent(t('loyLinkText', { name: done.loyalty!.name, s: t('loyLinkStamps', { s: done.loyalty!.stamps, of: done.loyalty!.of }), u: done.loyalty!.link! }))).catch(() => {})} />
+            )}
             {done.whatsapp && (
               <Button label={t('posWhatsappReceipt')} icon="whatsapp" kind="light"
                 onPress={() => Linking.openURL('https://wa.me/' + done.whatsapp + '?text=' + encodeURIComponent(receiptText(done, lang))).catch(() => {})} />
@@ -437,7 +450,22 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                   )}
                 </View>
               ) : (
-                <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
+                <View style={{ gap: 8 }}>
+                  <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
+                  {join ? (
+                    <View style={[st.card, { gap: 8 }]}>
+                      <Row style={{ justifyContent: 'space-between' }}>
+                        <Txt size={15} weight="semibold" style={{ flex: 1 }}>{t('loyCard')}</Txt>
+                        <Touch onPress={() => setJoin(false)} style={st.iconBtn} accessibilityLabel={t('loyJoinOff')}><Icon name="close" size={18} /></Touch>
+                      </Row>
+                      <TextInput value={phone} onChangeText={setPhone} placeholder={t('loyJoinPhone')} placeholderTextColor={color.faint} keyboardType="phone-pad" maxLength={20} style={[input, { textAlign: 'left', writingDirection: 'ltr' }]} />
+                      <TextInput value={name} onChangeText={setName} placeholder={t('loyJoinName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+                      <Muted size={12}>{t('loyJoinHint')}</Muted>
+                    </View>
+                  ) : (
+                    <Touch onPress={() => setJoin(true)} style={{ paddingVertical: 4, alignSelf: 'center' }}><Muted>{t('loyJoin')}</Muted></Touch>
+                  )}
+                </View>
               ))}
 
               {/* API 1.40: the discount is the owner's only. */}
@@ -482,7 +510,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 </>
               )}
 
-              {who ? (
+              {joining ? null : who ? (
                 <View style={{ gap: 8 }}>
                   <Txt size={14} weight="semibold">{t('posCustomer')}</Txt>
                   <TextInput value={name} onChangeText={setName} placeholder={t('posCustomerName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
@@ -499,7 +527,8 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing} onPress={() => sale.mutate()} />
+              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing || joinMissing} onPress={() => sale.mutate()} />
+              {joinMissing && <Muted size={12} tint={color.amber} center>{t('loyJoinNeed')}</Muted>}
             </View>
           </>
         )}
