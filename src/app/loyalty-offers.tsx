@@ -48,7 +48,7 @@ export default function LoyaltyOffersScreen() {
           <>
             <View style={[st.card, { paddingVertical: 4 }]}>
               {row('birthday', t('offerBirthday'), t('offerBirthdayHint', { n: d.birthdays }))}
-              {row('comeback', t('offerComeback'), t('offerComebackHint', { n: d.comeback_days }), true)}
+              {row('comeback', t('offerComeback', { p: d.comeback_pct ?? 30 }), t('offerComebackHint', { n: d.comeback_days, v: d.comeback_valid_days ?? 2 }), true)}
             </View>
             <Muted size={12} center>{t('offersNote')}</Muted>
           </>
