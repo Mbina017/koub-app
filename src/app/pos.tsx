@@ -314,8 +314,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   // API 1.41: no card to scan: the customer's number puts the stamps on their card (or a new one).
-  const [join, setJoin] = useState(false);
-  const joining = loyaltyOn && !card && join;
+  const joining = loyaltyOn && !card && phone.trim() !== '';
   // A Bahrain number of 8 digits, or a full international one (10 to 15 digits), as the store accepts.
   const joinDigits = phone.replace(/\D/g, '').replace(/^0+/, '').length;
   const joinMissing = joining && joinDigits !== 8 && (joinDigits < 10 || joinDigits > 15);
@@ -350,7 +349,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: cashier ? 0 : dv, discount_type: discType,
-      cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
+      cash_given: method === 'cash' ? cash : null, expected_total: total,
+      // With cards on, the number and name are the card box's: a scanned card hides it, so they are not sent then.
+      name: loyaltyOn && card ? '' : name.trim(), phone: loyaltyOn && card ? '' : phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
       ...(joining ? { loyalty_join: true } : {}),
@@ -360,7 +361,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   });
 
   const reset = () => {
-    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setJoin(false); setCard(null); setUseFree(false); setDone(null); sale.reset();
+    setRef(newRef()); setWhere(''); setPlate(''); setCar(''); setMethod(first); setDiscType('amount'); setDisc(''); setGiven(''); setWho(false); setName(''); setPhone(''); setCard(null); setUseFree(false); setDone(null); sale.reset();
   };
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
@@ -439,19 +440,13 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
               ) : (
                 <View style={{ gap: 8 }}>
                   <Button label={t('loyScan')} icon="gift" kind="light" onPress={() => setScan(true)} />
-                  {join ? (
-                    <View style={[st.card, { gap: 8 }]}>
-                      <Row style={{ justifyContent: 'space-between' }}>
-                        <Txt size={15} weight="semibold" style={{ flex: 1 }}>{t('loyCard')}</Txt>
-                        <Touch onPress={() => setJoin(false)} style={st.iconBtn} accessibilityLabel={t('loyJoinOff')}><Icon name="close" size={18} /></Touch>
-                      </Row>
-                      <TextInput value={phone} onChangeText={setPhone} placeholder={t('loyJoinPhone')} placeholderTextColor={color.faint} keyboardType="phone-pad" maxLength={20} style={[input, { textAlign: 'left', writingDirection: 'ltr' }]} />
-                      <TextInput value={name} onChangeText={setName} placeholder={t('loyJoinName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
-                      <Muted size={12}>{t('loyJoinHint')}</Muted>
-                    </View>
-                  ) : (
-                    <Touch onPress={() => setJoin(true)} style={{ paddingVertical: 4, alignSelf: 'center' }}><Muted>{t('loyJoin')}</Muted></Touch>
-                  )}
+                  {/* API 1.42: the customer's number: their card gets the stamps by itself (or a new one is made). */}
+                  <View style={[st.card, { gap: 8 }]}>
+                    <Txt size={14} weight="semibold">{t('loyNoCard')}</Txt>
+                    <TextInput value={phone} onChangeText={setPhone} placeholder={t('loyJoinPhone')} placeholderTextColor={color.faint} keyboardType="phone-pad" maxLength={20} style={[input, { textAlign: 'left', writingDirection: 'ltr' }]} />
+                    <TextInput value={name} onChangeText={setName} placeholder={t('loyJoinName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
+                    <Muted size={12}>{t('loyJoinHint')}</Muted>
+                  </View>
                 </View>
               ))}
 
@@ -497,7 +492,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 </>
               )}
 
-              {joining ? null : who ? (
+              {!loyaltyOn && (who ? (
                 <View style={{ gap: 8 }}>
                   <Txt size={14} weight="semibold">{t('posCustomer')}</Txt>
                   <TextInput value={name} onChangeText={setName} placeholder={t('posCustomerName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
@@ -505,7 +500,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 </View>
               ) : (
                 <Touch onPress={() => setWho(true)} style={{ paddingVertical: 6 }}><Muted>{'+ ' + t('posAddCustomer')}</Muted></Touch>
-              )}
+              ))}
               </>)}
             </ScrollView>
             <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
@@ -516,7 +511,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Txt size={22} weight="bold">{money(total, lang)}</Txt>
               </Row>
               <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing || joinMissing} onPress={() => sale.mutate()} />
-              {joinMissing && <Muted size={12} tint={color.amber} center>{t('loyJoinNeed')}</Muted>}
+              {joinMissing && <Muted size={12} tint={color.amber} center>{t('loyJoinWrong')}</Muted>}
             </View>
           </>
         )}
