@@ -4,7 +4,7 @@
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,8 +14,6 @@ import { api, ApiError } from '../lib/api';
 import { useApiSession, useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
 import { money } from '../lib/format';
-import { sharePdf } from '../lib/print';
-import { receiptHtml, receiptText, RECEIPT_SIZE } from '../lib/receipt';
 import { showMessage } from '../lib/confirm';
 import type { LoyaltyCard, PosChoice, PayRefMode, PosMethod, PosProduct, PosReceipt, PosShelf } from '../lib/types';
 import { PosOptions, type PosPick } from '../components/PosOptions';
@@ -397,23 +395,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <View style={st.change}><Txt size={15} weight="semibold" tint={color.green}>{t('posChange', { x: money(done.change, lang) })}</Txt></View>
               )}
             </View>
-            {done.track && done.status !== 'cancelled' && (
-              // The customer's own page (API 1.27): they scan it and see when the order is ready.
-              <View style={[st.card, { alignItems: 'center', gap: 8 }]}>
-                <View style={{ padding: 8, backgroundColor: '#FFFFFF', borderRadius: radius.md }}><QrCode value={done.track} size={170} /></View>
-                <Muted center>{t('trackScan')}</Muted>
-              </View>
-            )}
-            <Button label={t('posShareReceipt')} icon="print" kind="light" onPress={() => sharePdf(receiptHtml(done, lang), 'KOUB-' + done.number, RECEIPT_SIZE).catch(() => {})} />
-            {done.whatsapp && done.loyalty?.link && (
-              // Backup for the store's message (template waiting, WhatsApp off): staff send the card link themselves.
-              <Button label={t('loySendLink')} icon="gift" kind="light"
-                onPress={() => Linking.openURL('https://wa.me/' + done.whatsapp + '?text=' + encodeURIComponent(t('loyLinkText', { name: done.loyalty!.name, s: t('loyLinkStamps', { s: done.loyalty!.stamps, of: done.loyalty!.of }), u: done.loyalty!.link! }))).catch(() => {})} />
-            )}
-            {done.whatsapp && (
-              <Button label={t('posWhatsappReceipt')} icon="whatsapp" kind="light"
-                onPress={() => Linking.openURL('https://wa.me/' + done.whatsapp + '?text=' + encodeURIComponent(receiptText(done, lang))).catch(() => {})} />
-            )}
+            {/* The customer hears from KOUB's WhatsApp (API 1.41); no receipt or tracking code to hand over here. */}
             <Button label={t('posNewSale')} icon="cash" onPress={() => { reset(); onClose(); }} />
           </ScrollView>
         ) : (
