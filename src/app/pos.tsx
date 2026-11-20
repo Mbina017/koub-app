@@ -349,7 +349,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const sale = useMutation({
     mutationFn: () => api.posSale(session, {
       ref, lines: lines.map((l) => ({ id: l.p.id, qty: l.qty, ...(l.choice ? { choice: l.choice.key } : {}), ...(l.note ? { note: l.note } : {}) })), method, discount: cashier ? 0 : dv, discount_type: discType,
-      cash_given: method === 'cash' ? cash : null, expected_total: total, name: name.trim(), phone: phone.trim(),
+      cash_given: method === 'cash' ? cash : null, expected_total: total,
+      // With cards on, the number and name are the card box's: a scanned card hides it, so they are not sent then.
+      name: loyaltyOn && card ? '' : name.trim(), phone: loyaltyOn && card ? '' : phone.trim(),
       ...(where ? { where: where === 'shop' ? t('whereShop') : '🚗 ' + (carText || t('whereCar').replace('🚗 ', '')) } : {}),
       ...(card ? { loyalty: card.code, loyalty_redeem: free > 0 } : {}),
       ...(joining ? { loyalty_join: true } : {}),
@@ -442,7 +444,7 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                   <View style={[st.card, { gap: 8 }]}>
                     <Txt size={14} weight="semibold">{t('loyNoCard')}</Txt>
                     <TextInput value={phone} onChangeText={setPhone} placeholder={t('loyJoinPhone')} placeholderTextColor={color.faint} keyboardType="phone-pad" maxLength={20} style={[input, { textAlign: 'left', writingDirection: 'ltr' }]} />
-                    {phone.trim() !== '' && <TextInput value={name} onChangeText={setName} placeholder={t('loyJoinName')} placeholderTextColor={color.faint} maxLength={80} style={input} />}
+                    <TextInput value={name} onChangeText={setName} placeholder={t('loyJoinName')} placeholderTextColor={color.faint} maxLength={80} style={input} />
                     <Muted size={12}>{t('loyJoinHint')}</Muted>
                   </View>
                 </View>
