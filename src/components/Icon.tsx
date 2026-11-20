@@ -3,6 +3,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { color } from '../lib/theme';
 
 const paths = {
+  print: <><Path d="M7 9V4h10v5" /><Rect x="4" y="9" width="16" height="8" rx="2" /><Path d="M7 14h10v6H7z" /></>,
   home: <Path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" />,
   orders: <><Path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><Path d="M4 8l8 4 8-4M12 12v8" /></>,
   products: <><Path d="M6 5h11v11a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" /><Path d="M17 8h1.5a2.5 2.5 0 0 1 0 5H17" /></>,
@@ -30,6 +31,7 @@ const paths = {
   edit: <><Path d="M4 20h4L19 9l-4-4L4 16z" /><Path d="M13.5 6.5l4 4" /></>,
   logout: <><Path d="M10 5H5v14h5" /><Path d="M14 8l4 4-4 4M18 12H9" /></>,
   close: <Path d="M6 6l12 12M18 6L6 18" />,
+  plus: <Path d="M12 5v14M5 12h14" />,
   spark: <Path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />,
 } as const;
 export type IconName = keyof typeof paths;

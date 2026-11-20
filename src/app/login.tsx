@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { ApiError, normalizeSite } from '../lib/api';
 import { useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
 import { Button, Muted, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { Logo } from '../components/Logo';
 
 export default function Login() {
   const { t, lang, signIn, signInDemo, setLangPref } = useSession();
   const insets = useSafeAreaInsets();
-  const [site, setSite] = useState('koubbh.com');
+  // The web version is served by the store itself (koubbh.com/staff): that store is the default.
+  const here = Platform.OS === 'web' ? globalThis.location?.host ?? '' : '';
+  const [site, setSite] = useState(here && !here.startsWith('localhost') ? here : 'koubbh.com');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'in' | 'demo' | null>(null);
@@ -24,6 +28,8 @@ export default function Login() {
       await signIn({ site: normalizeSite(site), user: user.trim(), password: password.trim() });
     } catch (e) {
       const kind = e instanceof ApiError ? e.kind : 'network';
+      // A refusal from the store (waiting for approval, switched off, too many tries) says why in its own words.
+      if (e instanceof ApiError && e.kind === 'refused') return setError(e.message);
       setError(t(kind === 'auth' ? 'errAuth' : kind === 'forbidden' ? 'errForbidden' : kind === 'not_found' ? 'errNotFound' : 'errNetwork'));
     } finally {
       setBusy(null);
@@ -37,8 +43,8 @@ export default function Login() {
           <Icon name="globe" size={16} />
           <Txt size={13} weight="semibold">{lang === 'ar' ? 'English' : 'العربية'}</Txt>
         </Touch>
-        <Txt size={52} center style={{ fontFamily: font.brand, letterSpacing: 6, lineHeight: 60 }} ltr>KOUB</Txt>
-        <Muted center size={11} style={{ letterSpacing: 2.5, marginBottom: 40 }} ltr>YOUR DAILY WORKSPACE</Muted>
+        <Logo width={220} center />
+        <Muted center size={11} style={{ letterSpacing: 2.5, marginTop: 16, marginBottom: 40 }} ltr>YOUR DAILY WORKSPACE</Muted>
         <Txt size={26} weight="bold">{t('signInTitle')}</Txt>
         <Muted size={15} style={{ marginTop: 4, marginBottom: 28 }}>{t('signInSub')}</Muted>
 
@@ -52,7 +58,9 @@ export default function Login() {
         ) : null}
 
         <Button label={t('signIn')} onPress={submit} loading={busy === 'in'} disabled={busy === 'demo'} />
-        <Button label={t('tryDemo')} kind="ghost" onPress={async () => { setBusy('demo'); try { await signInDemo(); } finally { setBusy(null); } }} loading={busy === 'demo'} disabled={busy === 'in'} style={{ marginTop: space.md }} />
+        <Button label={t('staffSignUp')} kind="light" icon="users" onPress={() => router.push({ pathname: '/register' as never, params: { site } } as never)} disabled={!!busy} style={{ marginTop: space.md }} />
+        {/* No demo on the store's web version (staff only); the phone app keeps it for App Store review. */}
+        {Platform.OS !== 'web' && <Button label={t('tryDemo')} kind="ghost" onPress={async () => { setBusy('demo'); try { await signInDemo(); } finally { setBusy(null); } }} loading={busy === 'demo'} disabled={busy === 'in'} style={{ marginTop: space.md }} />}
       </ScrollView>
     </KeyboardAvoidingView>
   );

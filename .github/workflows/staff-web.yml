@@ -1,0 +1,50 @@
+# The web version of the app (koubbh.com/staff): built and published by GitHub after every merge, so nobody uploads it
+# by hand. Each merge into claude/app-undo-bulk makes a release "staff-web-<short sha>" with staff-web.tgz and its
+# SHA-256 in the notes. Publishing a release changes nothing on the store: it is installed from WP-CLI with
+#   koub_staff_web_install("staff-web-<sha>/staff-web.tgz", "<sha256>")
+# which checks that checksum (koub-site, staff-web.php).
+name: Staff web release
+on:
+  push:
+    branches: [claude/app-undo-bulk]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: staff-web-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck and tests
+        run: |
+          npm run typecheck
+          npm test
+      - name: Web build
+        run: npx expo export --platform web --output-dir dist
+        env:
+          EXPO_OFFLINE: 1
+      - name: Package
+        id: pkg
+        run: |
+          tar -czf staff-web.tgz -C dist .
+          echo "sha=$(sha256sum staff-web.tgz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "tag=staff-web-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pkg.outputs.tag }}
+          SHA: ${{ steps.pkg.outputs.sha }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG already published"; exit 0; fi
+          gh release create "$TAG" staff-web.tgz --target "$GITHUB_SHA" --title "$TAG" \
+            --notes "Web version for koubbh.com/staff, built from ${GITHUB_SHA}.
+          sha256: ${SHA}"

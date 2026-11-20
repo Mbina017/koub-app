@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, View } from 'react-native';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../../lib/session';
@@ -10,7 +11,7 @@ import type { LangPref } from '../../lib/session';
 import { Icon, type IconName } from '../../components/Icon';
 
 export default function More() {
-  const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush } = useSession();
+  const { t, me, session, lock, setLock, signOut, langPref, setLangPref, push, savePush, cashier } = useSession();
   const [pushNote, setPushNote] = useState('');
   const [busy, setBusy] = useState(false);
   const changePush = async (p: typeof push) => {
@@ -48,12 +49,43 @@ export default function More() {
       />
       <Muted size={12} style={{ marginTop: 6 }}>{t('languageHint')}</Muted>
 
+      {/* Alerts go to the owner's phones only (the store sends them to owners). */}
+      {cashier ? (
+        <>
+          <SectionTitle title={t('alerts')} icon="bell" />
+          <Card padded={false}>
+            <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last />
+          </Card>
+          {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+        </>
+      ) : null}
+      {!cashier && <>
       <SectionTitle title={t('alerts')} icon="bell" />
       <Card padded={false}>
         <Item icon="orders" label={t('orderAlerts')} sub={t('orderAlertsHint')} right={<Switch value={push.on} disabled={busy} onValueChange={(on) => changePush({ ...push, on })} trackColor={{ true: color.ink, false: color.line }} />} last={!push.on} />
+        {push.on && <Item icon="cash" label={t('unpaidAlerts')} sub={t('unpaidAlertsHint')} right={<Switch value={push.unpaid} disabled={busy} onValueChange={(unpaid) => changePush({ ...push, unpaid })} trackColor={{ true: color.ink, false: color.line }} />} />}
+        {push.on && <Item icon="products" label={t('stockAlerts')} sub={t('stockAlertsHint')} right={<Switch value={push.stock} disabled={busy} onValueChange={(stock) => changePush({ ...push, stock })} trackColor={{ true: color.ink, false: color.line }} />} />}
         {push.on && <Item icon="lock" label={t('quietNight')} sub={t('quietNightHint')} right={<Switch value={push.quiet} disabled={busy} onValueChange={(quiet) => changePush({ ...push, quiet })} trackColor={{ true: color.ink, false: color.line }} />} last />}
       </Card>
       {pushNote ? <Muted size={12} tint={color.amber} style={{ marginTop: 6 }}>{pushNote}</Muted> : null}
+      </>}
+
+      <SectionTitle title={t('pos')} icon="cash" />
+      <Card padded={false}>
+        <Item icon="cash" label={t('posOpen')} sub={t('posOpenHint')} onPress={() => router.push('/pos')} />
+        <Item icon="users" label={t('newOrder')} sub={t('newOrderHint')} onPress={() => router.push('/order-new')} />
+        <Item icon="numbers" label={cashier ? t('myToday') : t('posToday')} onPress={() => router.push('/pos-today')} />
+        {/* API 1.40: no day close (no cash at the kiosk). */}
+        {!cashier && <Item icon="store" label={t('aheadTitle')} sub={t('aheadMenuHint')} onPress={() => router.push('/pos-ahead' as never)} />}
+        {!cashier && <Item icon="numbers" label={t('mrTitle')} sub={t('mrHint')} onPress={() => router.push('/pos-month' as never)} />}
+        {!cashier && <Item icon="spark" label={t('fbTitle')} sub={t('fbHint')} onPress={() => router.push('/pos-feedback' as never)} />}
+        {!cashier && <Item icon="gift" label={t('offersTitle')} sub={t('offersHint')} onPress={() => router.push('/loyalty-offers' as never)} />}
+        {!cashier && <Item icon="numbers" label={t('insightsTitle')} sub={t('insightsHint')} onPress={() => router.push('/pos-insights' as never)} />}
+        {!cashier && <Item icon="products" label={t('stockTitle')} sub={t('stockHint')} onPress={() => router.push('/pos-stock' as never)} />}
+        {!cashier && <Item icon="check" label={t('golive')} sub={t('goliveHint')} onPress={() => router.push('/pos-golive' as never)} />}
+        {!cashier && <Item icon="numbers" label={t('staffReport')} sub={t('staffReportHint')} onPress={() => router.push('/team-report' as never)} />}
+        {!cashier && <Item icon="users" label={t('staffTitle')} sub={t('staffHint')} onPress={() => router.push('/team' as never)} last />}
+      </Card>
 
       <SectionTitle title={t('account')} />
       <Card padded={false}>
@@ -63,11 +95,13 @@ export default function More() {
         <Item icon="logout" label={t('signOut')} danger last onPress={async () => { client.clear(); await signOut(); }} />
       </Card>
 
+      {!cashier && <>
       <SectionTitle title={t('comingNext')} />
       <Card padded={false}>
         <Item icon="truck" label={t('soonActions')} soon />
         <Item icon="edit" label={t('soonEdit')} soon last />
       </Card>
+      </>}
 
       <Muted size={12} center style={{ marginTop: space.xl }}>{'KOUB · ' + t('version', { v: Constants.expoConfig?.version ?? '1.0.0' })}</Muted>
     </Screen>

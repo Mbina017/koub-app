@@ -8,6 +8,10 @@ import { api, type Session } from './api';
 import type { Lang } from './types';
 
 export type PushResult = 'on' | 'off' | 'denied' | 'unsupported' | 'no_project' | 'demo' | 'error';
+// Alerts on this phone. New orders follow `on`; unfinished payments and stock can each be turned off (API 1.4).
+export type PushPrefs = { on: boolean; quiet: boolean; unpaid: boolean; stock: boolean };
+export const PUSH_DEFAULT: PushPrefs = { on: false, quiet: true, unpaid: true, stock: true };
+export type PushKind = 'new_order' | 'unpaid' | 'stock';
 
 // Show alerts while the app is open too, like a messaging app.
 if (Platform.OS !== 'web') {
@@ -34,12 +38,13 @@ async function token(): Promise<string | PushResult> {
   return (await Notifications.getExpoPushTokenAsync({ projectId: id })).data;
 }
 
-export async function setPush(session: Session, on: boolean, quiet: boolean, lang: Lang): Promise<PushResult> {
+export async function setPush(session: Session, p: PushPrefs, lang: Lang, on = p.on): Promise<PushResult> {
   if ('demo' in session) return 'demo';
   try {
     const t = await token();
     if (t === 'unsupported' || t === 'denied' || t === 'no_project') return on ? t : 'off';
-    const r = await api.push(session, { token: t, platform: Platform.OS === 'ios' ? 'ios' : 'android', enabled: on, quiet, lang });
+    const kinds: PushKind[] = ['new_order', ...(p.unpaid ? ['unpaid' as const] : []), ...(p.stock ? ['stock' as const] : [])];
+    const r = await api.push(session, { token: t, platform: Platform.OS === 'ios' ? 'ios' : 'android', enabled: on, quiet: p.quiet, lang, kinds });
     return r.enabled ? 'on' : 'off';
   } catch {
     return 'error';
@@ -50,8 +55,31 @@ export async function setPush(session: Session, on: boolean, quiet: boolean, lan
 export const useLastAlertTap: () => Notifications.NotificationResponse | null | undefined =
   Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse;
 
-// Order id from a tapped alert, if it is one of ours.
-export function orderFromNotification(r: Notifications.NotificationResponse | null | undefined): number | null {
-  const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown } | undefined;
-  return data?.type === 'new_order' && Number.isInteger(data.order_id) ? (data.order_id as number) : null;
+// Where a tapped alert opens, if it is one of ours: the new order, the unfinished payments list, pre-orders or products.
+export type AlertTarget =
+  | { pathname: '/order/[id]'; params: { id: string } }
+  | { pathname: '/unpaid' | '/preorders' | '/products' | '/team' | '/work' | '/pos-feedback' | '/pos-today' | '/pos-month' };
+export function targetFromNotification(r: Notifications.NotificationResponse | null | undefined): AlertTarget | null {
+  const data = r?.notification.request.content.data as { order_id?: unknown; type?: unknown; date?: unknown } | undefined;
+  switch (data?.type) {
+    case 'new_order': return Number.isInteger(data.order_id) ? { pathname: '/order/[id]', params: { id: String(data.order_id) } } : null;
+    case 'unpaid': return { pathname: '/unpaid' };
+    // API 1.16: a staff member signed up and waits for approval.
+    case 'staff_request': return { pathname: '/team' };
+    case 'preorder_ready': return { pathname: '/preorders' };
+    case 'sold_out': return { pathname: '/products' };
+    // API 1.31: a customer is in the car outside: the hand-over list.
+    case 'arrived': return { pathname: '/work' };
+    // API 1.40: an order I took is ready: my orders.
+    case 'bar_ready': return { pathname: '/work' };
+    // API 1.41: on the 1st, last month's report is ready.
+    case 'month_report': return { pathname: '/pos-month' };
+    // API 1.39: a customer note or a low rating: the feedback list (owner).
+    case 'feedback': return { pathname: '/pos-feedback' };
+    // API 1.25 / 1.30: a close that does not match, and the owner's daily summary: open that day's close.
+    // API 1.40: no day close any more; an old close alert and the daily summary open the day's sales.
+    case 'pos_close':
+    case 'pos_summary': return { pathname: '/pos-today' };
+    default: return null;
+  }
 }

@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
+import { confirmStep, showMessage } from '../../lib/confirm';
 import { useApiSession, useSession } from '../../lib/session';
 import { color, font, radius, space } from '../../lib/theme';
 import { money, num } from '../../lib/format';
-import type { Product, ProductFilter } from '../../lib/types';
-import { Chips, Empty, ErrorState, Muted, Row, Screen, Skeleton, TagChip, Txt } from '../../components/ui';
+import type { Product, ProductFilter, ProductList } from '../../lib/types';
+import { Button, Chips, Empty, ErrorState, Muted, Row, Screen, Skeleton, TagChip, Touch, Txt } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 
 const FILTERS: ProductFilter[] = ['all', 'low', 'out', 'preorder', 'draft'];
@@ -34,6 +36,25 @@ export default function Products() {
   const first = q.data?.pages[0];
   const rows = q.data?.pages.flatMap((p) => p.products) ?? [];
   const label: Record<ProductFilter, string> = { all: t('f_all'), low: t('f_low'), out: t('f_out'), preorder: t('f_preorder'), draft: t('f_draft') };
+  // Stock from the phone (API 1.3): the store's own change, lock and revision check; the row updates in place.
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<Product | null>(null);
+  const stock = useMutation({
+    mutationFn: ({ p, delta }: { p: Product; delta: number }) => api.productStock(session, p.id, delta, p.revision ?? ''),
+    onSuccess: (r, { p }) => {
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      qc.setQueriesData<InfiniteData<ProductList>>({ queryKey: ['products'] }, (d) => d && { ...d, pages: d.pages.map((pg) => ({ ...pg, products: pg.products.map((x) => (x.id === p.id ? { ...x, stock: r.qty, revision: r.revision, state: r.state } : x)) })) });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['preorders'] });
+      setEditing(null);
+    },
+    onError: (e) => { showMessage(t('stockNotSaved'), e instanceof ApiError && e.message === 'no_route' ? t('needsUpdate') : e.message); qc.invalidateQueries({ queryKey: ['products'] }); },
+  });
+  // Adding to an out-of-stock product sends a back-in-stock WhatsApp to the customers waiting, so ask first.
+  const change = (p: Product, delta: number) => {
+    if (delta > 0 && (p.stock ?? 0) <= 0 && p.waiting_alerts > 0) confirmStep({ label: t('addStock'), confirm: t('stockAlertConfirm', { n: p.waiting_alerts }), tone: 'primary' }, t('notNow'), () => stock.mutate({ p, delta }));
+    else stock.mutate({ p, delta });
+  };
 
   const header = (
     <View style={{ gap: space.md, paddingBottom: space.md }}>
@@ -53,7 +74,7 @@ export default function Products() {
         <FlatList
           data={rows}
           keyExtractor={(p) => String(p.id)}
-          renderItem={({ item }) => <ProductRow p={item} />}
+          renderItem={({ item }) => <ProductRow p={item} busy={stock.isPending && stock.variables?.p.id === item.id} onStep={(d) => change(item, d)} onEdit={() => setEditing(item)} />}
           ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
           contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: insets.bottom + 110 }}
           ListEmptyComponent={<Empty title={t('noProducts')} icon="products" />}
@@ -64,11 +85,38 @@ export default function Products() {
           keyboardDismissMode="on-drag"
         />
       )}
+      <StockSheet p={editing} busy={stock.isPending} onClose={() => setEditing(null)} onSave={(delta) => editing && change(editing, delta)} />
     </Screen>
   );
 }
 
-function ProductRow({ p }: { p: Product }) {
+// A delivery or a count correction in one go: how many, then add or remove.
+function StockSheet({ p, busy, onClose, onSave }: { p: Product | null; busy: boolean; onClose: () => void; onSave: (delta: number) => void }) {
+  const { t } = useSession();
+  const [n, setN] = useState('');
+  useEffect(() => { setN(''); }, [p?.id]);
+  const qty = Math.min(200, Math.max(0, parseInt(n.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))), 10) || 0));
+  const have = p?.stock ?? 0;
+  return (
+    <Modal visible={!!p} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={st.backdrop} onPress={onClose} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={st.sheet}>
+          <Txt size={17} weight="bold" lines={2}>{p?.name ?? ''}</Txt>
+          <Muted size={13}>{t('stockN', { n: have })}</Muted>
+          <TextInput value={n} onChangeText={setN} placeholder={t('stockAmount')} placeholderTextColor={color.faint} keyboardType="number-pad" autoFocus maxLength={3} style={[st.amount, { textAlign: 'center' }]} />
+          <Row gap={8}>
+            <Button label={t('addN') + (qty ? ' ' + qty : '')} icon="check" disabled={!qty || busy} loading={busy} onPress={() => onSave(qty)} style={{ flex: 1 }} />
+            <Button label={t('removeN') + (qty ? ' ' + qty : '')} kind="light" disabled={!qty || qty > Math.min(50, have) || busy} onPress={() => onSave(-qty)} style={{ flex: 1 }} />
+          </Row>
+          {qty > have && have >= 0 && qty <= 50 && <Muted size={12} center>{t('moreThanStock', { n: have })}</Muted>}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function ProductRow({ p, busy, onStep, onEdit }: { p: Product; busy: boolean; onStep: (delta: number) => void; onEdit: () => void }) {
   const { t, lang } = useSession();
   const pill = p.preorder ? { label: t('f_preorder'), tone: 'blue' as const }
     : p.state === 'out' ? { label: t('soldOut') + (p.waiting_alerts ? ' · ' + t('wantAlert', { n: p.waiting_alerts }) : ''), tone: 'red' as const }
@@ -82,7 +130,15 @@ function ProductRow({ p }: { p: Product }) {
         <Muted size={13}>{money(p.price, lang) + ' · ' + (p.profit !== null ? t('profitShort', { x: num(p.profit) }) : t('costMissing'))}</Muted>
         {pill && <View style={{ marginTop: 4 }}><TagChip label={pill.label} tone={pill.tone} small /></View>}
       </View>
-      {p.stock !== null && (
+      {p.stock !== null && p.quick && p.revision ? (
+        <Row gap={4} style={{ opacity: busy ? 0.5 : 1 }}>
+          <Touch onPress={() => onStep(-1)} disabled={busy || p.stock <= 0} style={st.step} accessibilityLabel={t('removeN')}><Txt size={20} weight="bold" tint={p.stock <= 0 ? color.faint : color.ink}>−</Txt></Touch>
+          <Touch onPress={onEdit} disabled={busy} style={[st.stock, p.stock <= 0 && { backgroundColor: color.redBg }, p.stock > 0 && p.state === 'low' && { backgroundColor: color.amberBg }]} accessibilityLabel={t('addStock')}>
+            <Txt size={18} weight="bold" center tint={p.stock <= 0 ? color.red : p.state === 'low' ? color.amber : color.ink} ltr>{String(p.stock)}</Txt>
+          </Touch>
+          <Touch onPress={() => onStep(1)} disabled={busy} style={st.step} accessibilityLabel={t('addN')}><Txt size={20} weight="bold">+</Txt></Touch>
+        </Row>
+      ) : p.stock !== null && (
         <View style={[st.stock, p.stock <= 0 && { backgroundColor: color.redBg }, p.stock > 0 && p.state === 'low' && { backgroundColor: color.amberBg }]}>
           <Txt size={18} weight="bold" center tint={p.stock <= 0 ? color.red : p.state === 'low' ? color.amber : color.ink} ltr>{String(p.stock)}</Txt>
         </View>
@@ -96,5 +152,9 @@ const st = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: font.regular, fontSize: 15, color: color.ink, height: 44 },
   row: { backgroundColor: color.surface, borderRadius: radius.lg, padding: space.md, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   thumb: { width: 56, height: 56, borderRadius: 14, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  step: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+  sheet: { backgroundColor: color.bg, padding: space.lg, paddingBottom: space.xl * 1.5, gap: space.md, borderTopLeftRadius: radius.lg * 1.5, borderTopRightRadius: radius.lg * 1.5 },
+  amount: { height: 56, borderRadius: radius.md, backgroundColor: color.sunken, fontFamily: font.bold, fontSize: 24, color: color.ink },
   stock: { minWidth: 48, height: 48, borderRadius: 24, paddingHorizontal: 8, backgroundColor: color.sunken, alignItems: 'center', justifyContent: 'center' },
 });

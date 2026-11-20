@@ -1,5 +1,5 @@
 // Synthetic demo store: invented names and numbers only, so the app can be tried without signing in.
-import type { ActionKey, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, Product, ProductList, Tag } from './types';
+import type { AheadSettings, CloseMethod, PosCloseEntry, PosCloseReport, PosGolive, RefundState, StockUnit, StockView, RecipeItem, Insights, InsightsPeriod, ActionKey, BulkAction, BulkKey, BulkResult, Home, Me, Numbers, Order, OrderAction, OrderList, OrderSummary, PreorderGroup, Product, ProductList, ReleaseResult, Run, StockResult, Tag, UnpaidList, UnpaidRow, PosCatalog, PosMethod, PosShelf, PosReceipt, PosToday, BarTicket, PosStaff, PosStaffReport, PosStaffRow, ShopPeriod, ShopBooks, ShopExpense, ShopExpenseCat } from './types';
 
 const people = ['سارة م.', 'خالد ع.', 'نورة ي.', 'أحمد س.', 'ريم ح.', 'يوسف ب.', 'دانة ف.', 'عبدالله ر.', 'مريم ك.', 'حمد ج.', 'فاطمة ن.', 'علي ط.'];
 const catalog: [string, number, number | null, number | null][] = [
@@ -17,7 +17,11 @@ type Kind = 'prepare_bh' | 'prepare_gcc' | 'pickup' | 'gift' | 'cod' | 'preorder
 const plan: [Kind, number][] = [
   ['prepare_bh', 0.2], ['prepare_bh', 0.9], ['pickup', 1.6], ['prepare_gcc', 2.4], ['gift', 3.1], ['cod', 4.0],
   ['preorder', 5.5], ['done', 7], ['done', 9], ['cod', 26], ['done', 30], ['done', 49], ['done', 53], ['done', 75],
+  ['preorder', 11], ['preorder', 20], ['preorder', 34], ['preorder', 52],
 ];
+// Pre-orders wait for كوب السيف (5) or كوب جدحفص (7); one waits for both.
+const preorderLines: [number, number][][] = [[[5, 1]], [[5, 2]], [[5, 1], [7, 1]], [[7, 1]], [[5, 1]]];
+let preorderSeen = 0;
 
 const now = Date.now();
 const H = 3600 * 1000;
@@ -29,9 +33,9 @@ function ago(hours: number): string {
 }
 
 // Steps taken in demo mode change the invented orders for this session only.
-type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[] };
+type DemoOrder = OrderSummary & { kind: Kind; lines: [number, number][]; fulfilled?: boolean; collected?: boolean; cancelled?: boolean; released?: boolean; notes?: string[]; contact?: { whatsapp: string; call: string; address: string; city: string } };
 const orders: DemoOrder[] = plan.map(([kind, hours], k) => {
-  const lines: [number, number][] = k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
+  const lines: [number, number][] = kind === 'preorder' ? preorderLines[preorderSeen++ % preorderLines.length] : k % 3 === 0 ? [[0, 1], [3, 1]] : k % 4 === 1 ? [[4, 1]] : [[k % catalog.length, 1 + (k % 2)]];
   const total = Math.round((lines.reduce((s, [p, q]) => s + catalog[p][1] * q, 0) + (kind === 'pickup' ? 0 : kind === 'prepare_gcc' ? 4 : 1.5)) * 1000) / 1000;
   const tags: Tag[] = [];
   if (kind === 'gift') tags.push({ label: 'هدية · تنتظر العنوان', tone: 'blue' });
@@ -57,7 +61,7 @@ const inView = (o: DemoOrder, view: string, prepare: string) => {
   if (view === 'gifts') return o.kind === 'gift';
   return false;
 };
-const strip = ({ kind, lines, fulfilled, collected, cancelled, released, notes, ...o }: DemoOrder): OrderSummary => o;
+const strip = (d: DemoOrder): OrderSummary => { const { kind, lines, fulfilled, collected, cancelled, released, notes, contact, ...o } = d; return { ...o, can: actions(d).map((a) => a.key).filter((k) => !k.startsWith('undo_')) }; };
 
 function counts(): Record<string, number> {
   const c: Record<string, number> = {};
@@ -129,11 +133,49 @@ function home(period: string): Home {
       whatsapp: { count: 1, order_id: 1036 },
       preorder: c.preorder,
     },
+    work: (() => { const r = run(); return { run: { count: r.rows.filter((x) => x.today).length, total: r.count, cod: r.cod_total }, preorder_ready: preorderGroups().filter((g) => g.stock !== null && g.stock >= g.qty).reduce((sum, g) => sum + g.ready, 0), unpaid: { count: unpaidList().count, value: unpaidList().value } }; })(),
     stock: { low: 2, out: 2 },
-    visitors: { visitors: period === 'today' ? 184 : period === '7days' ? 1420 : 4310, pageviews: period === 'today' ? 512 : period === '7days' ? 4033 : 12870, orders: nb.orders },
+    visitors: { visitors: period === 'month' ? 4310 : 184, pageviews: period === 'month' ? 12870 : 512, orders: nb.orders },
     latest: orders.slice(0, 5).map(strip),
+    shop: (() => { const b = posBooks(period === '7days' ? '7days' : period, false); return { sales: b.sales, count: b.count, expenses: b.expenses, profit: b.profit, exact: b.exact }; })(),
   };
 }
+
+// Delivery details as the store keeps them; edits in demo mode last for the session.
+const areaOf = (o: DemoOrder) => o.tags.find((x) => x.label.startsWith('توصيل · '))?.label.slice(8) ?? 'المنامة';
+function contactOf(o: DemoOrder) {
+  return (o.contact ??= { whatsapp: '+9733' + String(3000000 + o.id * 7919).slice(0, 7), call: '', address: 'بيت ' + (o.id % 40) + ' · طريق ' + (3400 + (o.id % 9)) + ' · مجمع ' + (330 + (o.id % 7)), city: areaOf(o) });
+}
+function editContact(o: DemoOrder, p: Record<string, unknown>, en: boolean) {
+  const digits = String(p.whatsapp ?? '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/\D/g, '');
+  if (digits.length < 8) throw new Error(en ? 'Enter a valid WhatsApp number with its country code, e.g. +973 3XXX XXXX.' : 'اكتب رقم واتساب صحيح مع رمز الدولة، مثل ‎+973 3XXX XXXX‎.');
+  if (p.address !== undefined && !String(p.address).trim()) throw new Error(en ? 'Enter the street address.' : 'اكتب العنوان.');
+  const c = contactOf(o);
+  Object.assign(c, { whatsapp: '+' + (digits.length === 8 ? '973' + digits : digits), call: String(p.call ?? c.call), address: String(p.address ?? c.address).trim(), city: String(p.city ?? c.city).trim() });
+  (o.notes ??= []).push('انعدّلت بيانات التوصيل من التطبيق (تجربة)');
+}
+// The day's delivery run, the store's rules: out for delivery today, plus cash still out.
+function run(): Run {
+  const rows = orders.filter((o) => !o.cancelled && o.kind !== 'pickup' && o.kind !== 'prepare_gcc' && (o.fulfilled || (o.kind === 'done' && o.tags.some((x) => x.label === 'طلع للتوصيل')) || (o.kind === 'cod' && !o.collected && !o.next)))
+    .map((o) => {
+      const c = contactOf(o);
+      const cod = o.kind === 'cod' && !o.collected;
+      const today = o.fulfilled || now - Date.parse(o.created ?? '') < 24 * H;
+      return { id: o.id, number: o.number, name: o.name, area: c.city || 'المنامة', address: c.address, items: o.items, call: c.whatsapp.replace('+', ''), whatsapp: c.whatsapp.replace('+', ''), cod_due: cod ? o.due : null, gift: o.kind === 'gift', today: !!today, map: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(c.address + ', ' + c.city + ', البحرين') };
+    })
+    .filter((r) => r.today || r.cod_due !== null)
+    .sort((a, b) => a.area.localeCompare(b.area) || Number(a.number) - Number(b.number));
+  const cod = rows.filter((r) => r.cod_due !== null);
+  return { date: new Date().toISOString().slice(0, 10), count: rows.length, cod_total: cod.reduce((sum, r) => sum + (r.cod_due ?? 0), 0), cod_count: cod.length, rows };
+}
+
+// Card payments that did not finish (invented); payment links and "handled" last for the session.
+const unpaidRows: UnpaidRow[] = [
+  { id: 1052, number: '1052', name: 'هيا م.', total: 17.0, items: '2× كوب المنامة', created: new Date(now - 3 * H).toISOString(), ago: 'قبل 3 ساعات', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'EazyPay card', reminder: 'انرسل تذكير تلقائي', opened: false, shared: null, whatsapp: '97333000052' },
+  { id: 1051, number: '1051', name: 'بدر ع.', total: 15.5, items: '1× طقم كوبين · هدية', created: new Date(now - 20 * H).toISOString(), ago: 'قبل 20 ساعة', status: 'failed', status_label: 'فشل الدفع', payable: true, method: 'Benefit', reminder: 'ما انرسل تذكير تلقائي (واحد لكل عميل كل ٤٨ ساعة)', opened: true, shared: null, whatsapp: '97333000051' },
+  { id: 1050, number: '1050', name: 'شوق ح.', total: 9.0, items: '1× كوب السيف', created: new Date(now - 50 * H).toISOString(), ago: 'قبل 2 أيام', status: 'cancelled', status_label: 'ملغي', payable: false, method: 'EazyPay card', reminder: '', opened: false, shared: null, whatsapp: '97333000050' },
+];
+const unpaidList = (): UnpaidList => ({ count: unpaidRows.length, value: unpaidRows.reduce((sum, r) => sum + r.total, 0), rows: unpaidRows });
 
 function order(id: number): Order {
   const o = orders.find((x) => x.id === id) ?? orders[0];
@@ -150,8 +192,9 @@ function order(id: number): Order {
     id: o.id, number: o.number, status, status_label: o.cancelled ? 'ملغي' : done ? 'Completed' : 'Processing', created: o.created, ago: o.ago, via_staff: false, test: false,
     pickup: o.kind === 'pickup', cod: o.kind === 'cod', preorder: o.kind === 'preorder' && !o.released, fulfilment: done ? 'out_delivery' : null, fulfilment_at: done ? o.created : null, tags: o.tags,
     customer: { name: o.name, initial: o.name.slice(0, 1), phone: '+973 3••• ••' + String(10 + (o.id % 89)), whatsapp: null, call: null, orders: (o.id % 3) + 1, position: (o.id % 3) + 1, spent: Math.round(o.total * ((o.id % 3) + 1) * 1000) / 1000 },
-    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : 'بيت 12 · طريق 3401 · مجمع 334 · المنامة', country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
-    gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
+    address: { text: o.kind === 'pickup' ? '' : o.kind === 'prepare_gcc' ? 'حي النرجس · الرياض' : [contactOf(o).address, contactOf(o).city].filter(Boolean).join(' · '), country: o.kind === 'prepare_gcc' ? 'السعودية' : 'البحرين' },
+    contact_edit: o.cancelled ? null : { fields: o.kind === 'gift' ? ['whatsapp', 'recipient'] : o.kind === 'pickup' ? ['whatsapp', 'call'] : ['whatsapp', 'call', 'address'], values: { ...contactOf(o), recipient: o.kind === 'gift' ? '+97336000047' : '' }, out_for_delivery: done && o.kind !== 'pickup' },
+    gift: o.kind === 'gift' ? { name: 'لولوة', phone: '+973 3••• ••47', whatsapp: '97333000047', call: '97333000047', can_add_address: true, country: 'BH', anonymous: false, message: 'كل عام وأنتِ بخير 🤍', waiting_address: true } : null,
     note: o.id % 5 === 0 ? 'لو سمحت التوصيل بعد الساعة 6' : '',
     items,
     totals: { discount: 0, fees: [], shipping, refunded: 0, total: o.total },
@@ -171,7 +214,8 @@ function order(id: number): Order {
 }
 
 // The same choices the store offers (see koub_app_order_actions), with its Arabic wording.
-const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب' };
+const labels: Record<ActionKey, string> = { out_delivery: 'طلع للتوصيل', ready_pickup: 'جاهز للاستلام', release_preorder: 'المنتج وصل · حوّله للتحضير', cod_collected: 'تم تحصيل المبلغ', cancel: 'إلغاء الطلب', undo_fulfilment: 'تراجع عن «طلع للتوصيل»', undo_cod: 'تراجع عن «تم تحصيل المبلغ»' };
+const handedOver = (o: DemoOrder) => o.kind === 'done' || !!o.fulfilled;
 function actions(o: DemoOrder): OrderAction[] {
   if (o.cancelled) return [];
   const out: OrderAction[] = [];
@@ -181,33 +225,456 @@ function actions(o: DemoOrder): OrderAction[] {
   const paid = o.kind === 'cod' ? !!o.collected : true;
   // Open orders, and cash orders already handed over but not yet paid (as the dashboard's order card).
   const open = o.kind !== 'done' && !o.fulfilled;
+  if (handedOver(o)) out.push({ key: 'undo_fulfilment', label: o.kind === 'pickup' ? 'تراجع عن «جاهز للاستلام»' : labels.undo_fulfilment, confirm: 'ترجّع طلب #' + o.number + ' للتحضير؟ لو انرسل واتساب للعميل، ما ينسحب.', tone: 'undo' });
+  if (o.kind === 'cod' && o.collected) out.push({ key: 'undo_cod', label: labels.undo_cod, confirm: 'تسجّل إن كاش طلب #' + o.number + ' ما انحصل للحين؟', tone: 'undo' });
   if (open || (o.kind === 'cod' && !o.collected)) out.push({ key: 'cancel', label: labels.cancel, confirm: paid ? 'تلغي طلب #' + o.number + ' بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب.' : 'تلغي طلب #' + o.number + '؟ ما في مبلغ مدفوع.', tone: 'danger' });
   return out;
 }
 
+// ---- Shop till: sells the demo catalog (simple items with stock), keeps today's sales in memory.
+const posSales: PosReceipt[] = [];
+const menuDrinks: [string, number, PosShelf, 'hot' | 'cold' | null][] = [['آيس سبانش العقيلي', 2.5, 'coffee', 'cold'], ['أمريكانو', 1.5, 'coffee', 'hot'], ['كورتادو', 1.6, 'coffee', 'hot'], ['فلات وايت / لاتيه / كابتشينو', 1.8, 'coffee', 'hot'], ['سبانش / فانيلا / كراميل لاتيه', 2.1, 'coffee', 'cold'], ['كولد برو', 2.2, 'coffee', 'cold'], ['كرك', 0.8, 'tea', 'hot'], ['ماتشا', 2.2, 'tea', 'cold'], ['كيكة الرفاع', 1.8, 'sweets', null], ['تيراميسو', 2, 'sweets', null]];
+// Combined menu items (API 1.22): one is picked at the POS.
+const demoChoices: Record<number, { key: string; label: string }[]> = {
+  3: [{ key: 'flat-white', label: 'فلات وايت' }, { key: 'latte', label: 'لاتيه' }, { key: 'cappuccino', label: 'كابتشينو' }],
+  4: [{ key: 'spanish', label: 'سبانش' }, { key: 'vanilla', label: 'فانيلا' }, { key: 'caramel', label: 'كراميل' }],
+};
+let demoNo = 0;
+let demoOut: number[] = [];
+const methodLabel = (m: PosMethod, en: boolean) => ({ cash: en ? 'Cash' : 'كاش', card: en ? 'Card machine' : 'مكينة البطاقة', benefit: en ? 'BenefitPay' : 'بنفت باي', credit: en ? 'KOUB credit' : 'رصيد KOUB' })[m];
+function posCatalog(en: boolean): PosCatalog {
+  return {
+    products: [
+      ...menuDrinks.map(([name, price, shelf, temp], i) => ({ id: 700 + i, name, group: 'drinks' as const, shelf, temp, sku: 'MENU-' + i, price, stock: null, image: null, choices: demoChoices[i] ?? [], out_today: demoOut.includes(700 + i) })),
+      ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
+    ],
+    methods: ((demoCredit.on ? ['card', 'benefit', 'credit'] : ['card', 'benefit']) as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
+    loyalty: { stamps: 5, max_per_sale: 5 },
+    training: true,
+    benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
+    top: [700, 703, 704, 701, 706, 708],
+    pay_ref: 'off', // API 1.40: no payment number to type
+  };
+}
+function posSale(p: Record<string, unknown>, en: boolean): PosReceipt {
+  // Same reference and same basket: the same sale (as the store does).
+  const ref = String(p.ref) + ':' + ((p.lines as { id: number; qty: number; choice?: string; note?: string }[]) ?? []).map((l) => l.id + (l.choice ?? '') + (l.note ?? '') + 'x' + l.qty).sort().join(',');
+  const done = posSales.find((s) => (s as PosReceipt & { ref?: string }).ref === ref);
+  if (done) return { ...done, repeat: true };
+  const lines = ((p.lines as { id: number; qty: number; choice?: string; note?: string }[]) ?? []).map((l) => ({ row: (l.id >= 700 ? [menuDrinks[l.id - 700][0], menuDrinks[l.id - 700][1], null, null] : catalog[l.id - 100]) as (typeof catalog)[number], ...l }));
+  if (!lines.length) throw new Error(en ? 'The sale is empty.' : 'البيع فاضي.');
+  for (const l of lines) if (l.row && l.row[3] !== null && l.row[3] < l.qty) throw new Error(en ? l.row[0] + ': the store shows ' + l.row[3] + ' in stock. Fix the stock count first.' : l.row[0] + ': المخزون في النظام ' + l.row[3] + '. عدّل المخزون أول.');
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const sub = r3(lines.reduce((s, l) => s + l.row[1] * l.qty, 0));
+  const value = Number(p.discount) || 0;
+  // API 1.43: the card's 30% (comeback offer) instead of a shop discount.
+  const discount = p.loyalty_offer ? r3(sub * 0.3) : r3(Math.min(sub, p.discount_type === 'percent' ? (sub * Math.min(100, value)) / 100 : value));
+  const total = r3(sub - discount);
+  const method = p.method as PosMethod;
+  const given = method === 'cash' && p.cash_given != null ? Number(p.cash_given) : null;
+  if (given !== null && given < total) throw new Error(en ? 'The cash given is less than the total.' : 'الكاش المستلم أقل من المجموع.');
+  for (const l of lines) if (l.row[3] !== null) l.row[3] -= l.qty;
+  const phone = String(p.phone ?? '').replace(/\D+/g, '');
+  const sale: PosReceipt & { ref: string } = {
+    ref, id: 900 + posSales.length, number: String(2400 + posSales.length), status: 'completed', date: new Date().toISOString(),
+    no: ++demoNo,
+    lines: lines.map((l) => ({ name: l.row[0], qty: l.qty, total: r3(l.row[1] * l.qty), options: [demoChoices[l.id - 700]?.find((c) => c.key === l.choice)?.label, l.note].filter(Boolean).join(' · ') })), discount, total, method, method_label: methodLabel(method, en),
+    cash_given: given, change: given === null ? null : r3(given - total), name: String(p.name ?? ''), whatsapp: phone ? (phone.length === 8 ? '973' + phone : phone) : null, voidable: true,
+    pay_ref: p.pay_ref ? String(p.pay_ref) : null,
+    track: 'https://koubbh.com/o/DEMO' + String(1e7 + posSales.length).slice(0, 8),
+  };
+  // Demo of API 1.41: a number with no card scanned gets a new card with this sale's drinks as stamps.
+  if (p.loyalty_join && !p.loyalty) {
+    const drinks = Math.min(5, lines.filter((l) => l.id >= 700).reduce((n, l) => n + l.qty, 0));
+    sale.loyalty = { code: '', credit: null, no: 'KOUB-0003', name: String(p.name ?? '') || (en ? 'KOUB guest' : 'ضيف KOUB'), added: drinks, redeemed: false, new_rewards: drinks >= 5 ? 1 : 0, failed: false, reversed: false,
+      stamps: drinks % 5, of: 5, need: 5 - (drinks % 5), rewards: drinks >= 5 ? 1 : 0, joined: true, message: 'queued', link: 'https://koubbh.com/loyalty/' };
+  }
+  posSales.unshift(sale);
+  return sale;
+}
+// Demo only: the web demo can show the staff screens (API 1.40) with ?demo_role=cashier in the address.
+function demoRole(): 'owner' | 'cashier' {
+  try {
+    if (/[?&]demo_role=cashier\b/.test(String(globalThis.location?.search ?? ''))) globalThis.sessionStorage?.setItem('koub.demo.role', 'cashier');
+    return globalThis.sessionStorage?.getItem('koub.demo.role') === 'cashier' ? 'cashier' : 'owner';
+  } catch { return 'owner'; }
+}
+demoRole(); // read the address once at start, before any redirect drops it
+// Barista tickets (API 1.17), demo only.
+const demoBar: BarTicket[] = [
+  { id: 5021, number: '5021', no: 7, where: '🚗 لاندكروزر بيضاء', arrived: { at: new Date(Date.now() - 2 * 60_000).toISOString(), spot: 'موقف 12' }, state: 'waiting', at: null, since: new Date(Date.now() - 7 * 60_000).toISOString(), name: 'مريم', whatsapp: '97330000000', note: '', lines: [{ name: 'سبانش / فانيلا / كراميل لاتيه', qty: 2, drink: true, options: 'فانيلا · ثلج خفيف' }, { name: 'كيكة الرفاع', qty: 1, drink: true }, { name: 'كوب KOUB الحراري', qty: 1, drink: false }] },
+  { id: 5022, number: '5022', fire_at: new Date(Date.now() + 25 * 60_000).toISOString(), state: 'waiting', at: null, since: new Date(Date.now() - 2 * 60_000).toISOString(), name: 'علي', whatsapp: null, note: 'بدون سكر', lines: [{ name: 'V60 قوجي', qty: 1, drink: true }] },
+  { id: 5019, number: '5019', state: 'ready', at: null, since: new Date(Date.now() - 12 * 60_000).toISOString(), name: 'سارة', whatsapp: '97330000001', note: '', lines: [{ name: 'أمريكانو', qty: 1, drink: true }] },
+];
+demoBar.forEach((x) => x.lines.forEach((l, i) => { l.i = i; l.ready = false; }));
+demoBar[1].pickup = new Date(Math.ceil((Date.now() + 20 * 60_000) / 900_000) * 900_000).toISOString();
+// API 1.40: who took each order (the demo signs in as KOUB), and kiosk pickups. Synthetic.
+Object.assign(demoBar[0], { by: 'KOUB', mine: true, online: false, where: '🚗 12345 · لاندكروزر بيضاء' });
+Object.assign(demoBar[1], { by: '', mine: false, online: true });
+Object.assign(demoBar[2], { by: 'Demo Staff', mine: false, online: false });
+const demoPickups = [
+  { id: 1054, number: '1054', lines: [{ name: 'KOUB 2-PIECE SET', qty: 1 }], cod: false, collect: null, at: new Date(Date.now() - 5 * 3600_000).toISOString() },
+  { id: 1060, number: '1060', lines: [{ name: 'Riffa mug', qty: 2 }], cod: true, collect: 17, at: new Date(Date.now() - 40 * 60_000).toISOString() },
+];
+// Till staff (API 1.15), demo only.
+let demoPin = false;
+const demoStaff: PosStaff[] = [
+  { id: 901, name: 'سارة', login: 'till-1201', active: true, last_sale: new Date(Date.now() - 40 * 60_000).toISOString() },
+  { id: 902, name: 'علي', login: 'till-1202', active: true, last_sale: null },
+];
+function staffReport(period: string): PosStaffReport {
+  const blank = (id: number, name: string): PosStaffRow => ({ id, name, count: 0, total: 0, by_method: { cash: 0, card: 0, benefit: 0, credit: 0 }, discounts: 0, discount_count: 0, voids: 0, void_total: 0, refunds: 0 });
+  const k = period === 'today' ? 1 : period === 'yesterday' ? 1.2 : period === '7days' ? 6 : 24;
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const sara = { ...blank(901, 'سارة'), count: Math.round(14 * k), total: r3(31.6 * k), by_method: { cash: r3(12.4 * k), card: r3(15.2 * k), benefit: r3(4 * k), credit: 0 }, discounts: 1.5, discount_count: 1, voids: 1, void_total: 2.2, made: Math.round(3 * k), make_min: 3.5, handed: Math.round(12 * k), pickups: 0 };
+  const day = new Date().toISOString().slice(0, 10);
+  return {
+    period: { preset: period as ShopPeriod, start: day, end: day, label: day },
+    staff: [sara, ...demoStaff.filter((s) => s.id !== 901).map((s, i) => (i === 0 ? { ...blank(s.id, s.name), made: Math.round(11 * k), make_min: 4.2, handed: 1, pickups: Math.round(2 * k) } : blank(s.id, s.name)))],
+    events: [
+      { id: 5012, number: '5012', date: new Date(Date.now() - 50 * 60_000).toISOString(), staff: 'سارة', total: 2.2, kind: 'void', by: 'سارة', approved: 'pin' },
+      { id: 5009, number: '5009', date: new Date(Date.now() - 95 * 60_000).toISOString(), staff: 'سارة', total: 6.6, kind: 'discount', amount: 1.5, approved: 'pin' },
+    ],
+  };
+}
+function posToday(): PosToday {
+  const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
+  const live = posSales.filter((s) => s.status === 'completed');
+  live.forEach((s) => (by[s.method] = Math.round((by[s.method] + s.total) * 1000) / 1000));
+  return { count: live.length, total: Math.round(live.reduce((a, s) => a + s.total, 0) * 1000) / 1000, by_method: by,
+    sales: posSales.map((s) => ({ id: s.id, number: s.number, total: s.total, method: s.method, method_label: s.method_label, date: s.date, void: s.status === 'cancelled', items: s.lines.reduce((a, l) => a + l.qty, 0) })) };
+}
+// KOUB card offers (API 1.33), demo only.
+const demoOffers = { birthday: true, comeback: false };
+const demoCredit: { on: boolean; packs: [number, number][] } = { on: false, packs: [[10, 11], [20, 23], [30, 35]] };
+// Order ahead (API 1.29), demo only.
+const demoAhead = { on: false, from: '12:00', to: '22:00', cap: 6, lead: 10 };
+// Customer ratings (API 1.39), demo only. Synthetic.
+let demoReviewUrl = '';
+const demoFeedback = [
+  { m: 25, stars: 5, note: 'اللاتيه الإسباني رهيب 🤍', anon: false, name: 'Synthetic Guest', no: 18 },
+  { m: 140, stars: 2, note: 'انتظرت وايد في السيارة', anon: true, name: '', no: null },
+  { m: 600, stars: 4, note: '', anon: false, name: 'Demo Customer', no: 7 },
+  { m: 1500, stars: 5, note: 'Lovely cookies', anon: true, name: '', no: null },
+];
+function feedbackView() {
+  const items = demoFeedback.map((f) => ({ at: new Date(Date.now() - f.m * 60000).toISOString(), stars: f.stars, note: f.note, anon: f.anon, name: f.name, no: f.no }));
+  const avg = Math.round((items.reduce((a, f) => a + f.stars, 0) / items.length) * 10) / 10;
+  return { review_url: demoReviewUrl, count: items.length, avg, month: { count: items.length, avg }, items };
+}
+function aheadView(): AheadSettings {
+  return { ...demoAhead, slots: [], url: 'https://koubbh.com/menu/' };
+}
+// Ingredient stock and insights (API 1.28), demo only.
+const demoIng: Record<string, { name: string; unit: StockUnit; stock: number; low: number; cost: number; per_day: number }> = {
+  beans: { name: 'بن إسبريسو', unit: 'g', stock: 1850, low: 1000, cost: 0.012, per_day: 640 },
+  milk: { name: 'حليب', unit: 'ml', stock: 7200, low: 4000, cost: 0.0005, per_day: 3100 },
+  cup: { name: 'كوب ورق KOUB', unit: 'pc', stock: 140, low: 60, cost: 0.035, per_day: 38 },
+  lid: { name: 'غطاء', unit: 'pc', stock: 45, low: 60, cost: 0.012, per_day: 38 },
+};
+const demoRecipes: Record<number, Record<string, RecipeItem[]>> = { 700: { '': [{ ing: 'beans', qty: 18 }, { ing: 'cup', qty: 1 }, { ing: 'lid', qty: 1 }] } };
+function stockView(): StockView {
+  const cost = (id: number) => { const r = demoRecipes[id]?.['']; return r ? Math.round(r.reduce((a, x) => a + x.qty * (demoIng[x.ing]?.cost ?? 0), 0) * 1000) / 1000 : null; };
+  return {
+    ingredients: Object.entries(demoIng).map(([id, x]) => ({ id, ...x, days_left: x.per_day ? Math.round((x.stock / x.per_day) * 10) / 10 : null, is_low: x.stock <= x.low }))
+      .sort((a, b) => Number(b.is_low) - Number(a.is_low)),
+    products: menuDrinks.slice(0, 6).map(([name, price], i) => { const c = cost(700 + i); return { id: 700 + i, name, price, choices: demoChoices[i] ?? [], recipe: demoRecipes[700 + i] ?? {}, cost: c, margin: c === null ? null : Math.round((price - c) * 1000) / 1000 }; }),
+    log: [],
+  };
+}
+function insights(period: string): Insights {
+  const k = period === 'today' ? 1 : period === '30days' ? 30 : 7;
+  const shape = [0, 0, 0, 0, 0, 0, 0, 3, 9, 7, 5, 4, 6, 5, 4, 6, 8, 12, 15, 11, 7, 4, 1, 0];
+  const hours = shape.map((c) => ({ count: c * k, total: Math.round(c * k * 1.9 * 1000) / 1000 }));
+  const count = hours.reduce((a, h) => a + h.count, 0); const total = Math.round(hours.reduce((a, h) => a + h.total, 0) * 1000) / 1000;
+  const top = menuDrinks.slice(0, 6).map(([name, price], i) => { const qty = Math.round((40 - i * 6) * k / 2); return { id: 700 + i, name, qty, total: Math.round(qty * price * 1000) / 1000, cost: i === 0 ? Math.round(qty * 0.263 * 1000) / 1000 : null, profit: i === 0 ? Math.round(qty * (price - 0.263) * 1000) / 1000 : null }; });
+  return { period: period as InsightsPeriod, days: k, count, total, avg: Math.round((total / Math.max(1, count)) * 1000) / 1000, cups: Math.round(count * 1.4), per_day: Math.round((total / k) * 1000) / 1000,
+    hours, busiest_hour: 18, week: [0.9, 0.8, 0.85, 0.9, 1.3, 1.5, 1].map((f) => ({ count: Math.round((count / 7) * f), total: Math.round((total / 7) * f * 1000) / 1000 })),
+    wait: { ready: { n: count, median: 210, p90: 480 }, handed: { n: count, median: 300, p90: 660 } },
+    top, top_money: [...top].sort((a, b) => b.total - a.total), methods: { card: Math.round(total * 0.62 * 1000) / 1000, benefit: Math.round(total * 0.38 * 1000) / 1000 }, cancels: { changed: k, mistake: Math.ceil(k / 2) }, waste: [{ name: 'سبانش لاتيه', qty: k }] };
+}
+// Go-live list (API 1.26), demo only.
+let demoTraining = true;
+function posGolive(): PosGolive {
+  const owed = posSales.filter((s) => s.refund?.state === 'owed').length;
+  return { training: demoTraining, checks: [
+    { key: 'staff', ok: false, active: 2, pending: 1 }, { key: 'pin', ok: true }, { key: 'benefit_qr', ok: true }, { key: 'pay_ref', ok: true, mode: 'required' },
+    { key: 'stock', ok: true, managed: 9, zero: 0 }, { key: 'practice_close', ok: demoCloses.length > 0, closes: demoCloses.length },
+    { key: 'refunds', ok: owed === 0, owed }, { key: 'training', ok: !demoTraining, on: demoTraining, sales: posSales.length },
+  ] };
+}
+// End-of-day close (API 1.25), demo only: the comparison of today's demo sales with what was entered.
+const demoCloses: PosCloseEntry[] = [];
+function posClose(): PosCloseReport {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const by = { card: { count: 0, total: 0, missing_ref: 0 }, benefit: { count: 0, total: 0, missing_ref: 0 } } as PosCloseReport['expected']['by_method'];
+  const live = posSales.filter((s) => s.status === 'completed' && s.method !== 'cash');
+  for (const s of live) { const b = by[s.method as CloseMethod]; b.count++; b.total = r3(b.total + s.total); if (!s.pay_ref) b.missing_ref++; }
+  // Cancelled, money still owed: the shop still holds it (as the store counts it).
+  const held = posSales.filter((s) => s.status === 'cancelled' && s.refund?.state === 'owed' && s.method !== 'cash');
+  for (const s of held) { const b = by[s.method as CloseMethod]; b.total = r3(b.total + s.total); }
+  const voids = posSales.filter((s) => s.status === 'cancelled');
+  const last = demoCloses[demoCloses.length - 1];
+  const today = ymd(new Date());
+  const owedList = posSales.filter((s) => s.refund?.state === 'owed').map((s) => ({ id: s.id, no: s.no ?? null, number: s.number, date: s.date, amount: s.total, method: s.method, pay_ref: s.pay_ref ?? null, name: s.name, whatsapp: s.whatsapp, training: true }));
+  return {
+    refunds_owed: owedList,
+    date: today,
+    expected: { held: held.length, by_method: by, total: r3(by.card.total + by.benefit.total), void: { count: voids.length, total: r3(voids.reduce((a, s) => a + s.total, 0)) }, refunds: 0, dup_refs: 0, training: true,
+      sales: [...posSales].reverse().map((s) => ({ id: s.id, no: s.no ?? null, date: s.date, method: s.method, total: s.total, kept: s.status === 'cancelled' ? 0 : s.total, pay_ref: s.pay_ref ?? null, dup_of: null, void: s.status === 'cancelled', staff: 'KOUB' })) },
+    closes: demoCloses,
+    diff_now: last ? { card: r3(last.counted.card - by.card.total), benefit: r3(last.counted.benefit - by.benefit.total) } : null,
+    days: Array.from({ length: 14 }, (_, i) => { const d = ymd(new Date(Date.now() - i * 86_400_000)); const c = i === 0 ? last : i === 2 ? null : { ok: i !== 4, diff: i === 4 ? -1.5 : 0 };
+      return { date: d, closed: !!c, ok: c ? c.ok : null, diff: c ? (i === 0 && last ? r3(last.diff.card + last.diff.benefit) : (c as { diff: number }).diff) : null, attempts: c ? 1 : 0 }; }),
+  };
+}
+function posCloseSave(p: Record<string, unknown>, en: boolean): PosCloseReport {
+  const counted = (p.counted ?? {}) as Record<string, unknown>;
+  for (const m of ['card', 'benefit']) if (counted[m] === undefined || counted[m] === null || Number.isNaN(Number(counted[m])) || Number(counted[m]) < 0) throw new Error(en ? 'Enter the total for the card machine and for BenefitPay (0 if none).' : 'اكتب مجموع مكينة البطاقة ومجموع بنفت باي (0 إذا ما في).');
+  const exp = posClose().expected.by_method;
+  const c = { card: Number(counted.card), benefit: Number(counted.benefit) };
+  const diff = { card: Math.round((c.card - exp.card.total) * 1000) / 1000, benefit: Math.round((c.benefit - exp.benefit.total) * 1000) / 1000 };
+  demoCloses.push({ at: new Date().toISOString(), by: 'KOUB', counted: c, counts: {}, note: String(p.note ?? ''), expected: { card: { count: exp.card.count, total: exp.card.total }, benefit: { count: exp.benefit.count, total: exp.benefit.total } }, diff, ok: !diff.card && !diff.benefit, training: true });
+  return posClose();
+}
+function posVoid(id: number, en: boolean, p: Record<string, unknown> = {}): PosReceipt {
+  const s = posSales.find((x) => x.id === id);
+  if (!s || s.status !== 'completed') throw new Error(en ? 'Only a shop sale from today can be cancelled here.' : 'بس بيع المحل من اليوم ينلغى من هني.');
+  const state = (p.reason === 'unpaid' ? 'none' : ['done', 'owed', 'none'].includes(String(p.refund)) ? p.refund : 'owed') as RefundState;
+  const ref = String(p.refund_ref ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (state === 'done' && ref.length < 4) throw new Error(en ? 'Enter the refund number from the card machine or BenefitPay.' : 'اكتب رقم الاسترجاع من المكينة أو بنفت.');
+  s.refund = { state, ref: state === 'done' ? ref : null, amount: s.total };
+  s.status = 'cancelled'; s.voidable = false;
+  for (const l of s.lines) { const row = catalog.find((c) => c[0] === l.name); if (row && row[3] !== null) row[3] += l.qty; }
+  return s;
+}
+
+// ---- Shop books: today's till sales and the expenses entered in the demo, kept in memory.
+const expenseLabel = (c: ShopExpenseCat, en: boolean) => ({ stock: en ? 'Supplies and stock' : 'مواد وبضاعة', rent: en ? 'Rent' : 'إيجار', salary: en ? 'Salaries' : 'رواتب', bills: en ? 'Bills' : 'فواتير', other: en ? 'Other' : 'ثاني' })[c];
+const shopExpenses: ShopExpense[] = [
+  { id: 'demo-exp-1', date: ymd(new Date()), amount: 6.5, cat: 'stock', cat_label: expenseLabel('stock', false), label: 'حليب وثلج', by: 'KOUB', at: new Date().toISOString(), removable: true },
+];
+function posBooks(period: string, en: boolean): ShopBooks {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const now = new Date();
+  const days = period === 'yesterday' ? 1 : period === '7days' ? 7 : period === 'month' ? Number(ymd(now).slice(8)) : 1;
+  const end = period === 'yesterday' ? ymd(new Date(now.getTime() - 86400_000)) : ymd(now);
+  const start = ymd(new Date(new Date(end + 'T12:00:00Z').getTime() - (days - 1) * 86400_000));
+  const live = period === 'yesterday' ? [] : posSales.filter((s) => s.status === 'completed');
+  const by = { cash: 0, card: 0, benefit: 0 } as Record<PosMethod, number>;
+  live.forEach((s) => (by[s.method] = r3(by[s.method] + s.total)));
+  const sales = r3(live.reduce((a, s) => a + s.total, 0));
+  const fees = r3((by.card + by.benefit) * 0.02);
+  const goods = r3(sales * 0.35);
+  const entries = shopExpenses.filter((e) => e.date >= start && e.date <= end).map((e) => ({ ...e, cat_label: expenseLabel(e.cat, en) }));
+  const expenses = r3(entries.reduce((a, e) => a + e.amount, 0));
+  const cats = new Map<ShopExpenseCat, number>();
+  entries.forEach((e) => cats.set(e.cat, r3((cats.get(e.cat) ?? 0) + e.amount)));
+  const count = live.length;
+  return {
+    period: { preset: period as ShopBooks['period']['preset'], start, end, label: start === end ? end : start + ' – ' + end },
+    sales, count, items: live.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0), average: count ? r3(sales / count) : 0, refunded: 0,
+    by_method: by, goods, fees, expenses,
+    by_category: [...cats].map(([key, value]) => ({ key, label: expenseLabel(key, en), value })).sort((a, b) => b.value - a.value),
+    profit: r3(sales - goods - fees - expenses), exact: false, missing: [en ? 'Karak (no cost yet)' : 'كرك (ما له تكلفة للحين)'],
+    days: [], entries, categories: (['stock', 'rent', 'salary', 'bills', 'other'] as ShopExpenseCat[]).map((key) => ({ key, label: expenseLabel(key, en) })),
+  };
+}
+function expenseAdd(p: Record<string, unknown>, en: boolean): { entry: ShopExpense; repeat?: boolean } {
+  const done = shopExpenses.find((e) => e.id === p.ref);
+  if (done) return { entry: done, repeat: true };
+  const amount = Math.round(Number(p.amount) * 1000) / 1000;
+  if (!(amount > 0)) throw new Error(en ? 'Enter the amount paid.' : 'اكتب المبلغ المدفوع.');
+  const cat = (p.cat as ShopExpenseCat) ?? 'other';
+  const entry: ShopExpense = { id: String(p.ref), date: String(p.date || ymd(new Date())), amount, cat, cat_label: expenseLabel(cat, en), label: String(p.label ?? ''), by: 'KOUB', at: new Date().toISOString(), removable: true };
+  shopExpenses.unshift(entry);
+  return { entry };
+}
+
 export async function demoPost<T>(path: string, p: Record<string, unknown>): Promise<T> {
   await new Promise((r) => setTimeout(r, 500));
+  if (path === '/pos/expenses') return expenseAdd(p, p.lang === 'en') as T;
+  if (path === '/pos/expenses/remove') { const i = shopExpenses.findIndex((e) => e.id === p.id); if (i >= 0) shopExpenses.splice(i, 1); return { ok: true } as T; }
+  if (path === '/pos/sale') return posSale(p, p.lang === 'en') as T;
+  if (path === '/pos/close') return posCloseSave(p, p.lang === 'en') as T;
+  if (path === '/pos/out') { demoOut = demoOut.filter((x) => x !== Number(p.id)); if (p.out) demoOut.push(Number(p.id)); return { out: demoOut } as T; }
+  if (/^\/bar\/pickup\/\d+\/done$/.test(path)) { const i = demoPickups.findIndex((x) => x.id === Number(path.split('/')[3])); if (i < 0) throw new Error(p.lang === 'en' ? 'This order was handed over already.' : 'هالطلب انسلّم من قبل.'); demoPickups.splice(i, 1); return { ok: true, id: Number(path.split('/')[3]) } as T; }
+  if (/^\/bar\/\d+$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.state = p.state as BarTicket['state']; x.at = new Date().toISOString(); if (x.state === 'waiting') x.lines.forEach((l) => (l.ready = false)); return x as T; }
+  if (/^\/bar\/\d+\/start$/.test(path)) { const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found'); x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() }; return x as T; }
+  if (/^\/bar\/\d+\/item$/.test(path)) {
+    const x = demoBar.find((b) => b.id === Number(path.split('/')[2])); if (!x) throw new Error('not found');
+    x.lines.forEach((l, i) => { if ((l.i ?? i) === Number(p.index)) l.ready = !!p.ready; });
+    if (!x.started) x.started = { by: 'KOUB', mine: true, at: new Date().toISOString() };
+    if (x.lines.every((l) => l.ready) && x.state === 'waiting') x.state = 'ready'; else if (!x.lines.every((l) => l.ready) && x.state === 'ready') x.state = 'waiting';
+    return x as T;
+  }
+  if (path === '/pos/owner-pin') { demoPin = true; return { pin_set: true } as T; }
+  if (path === '/pos/staff/add') {
+    const s: PosStaff = { id: 900 + demoStaff.length, name: String(p.name ?? ''), login: 'till-' + (2000 + demoStaff.length), active: true, last_sale: null };
+    demoStaff.push(s); return { staff: s, login: s.login, password: 'demo abcd efgh ijkl' } as T;
+  }
+  if (/^\/pos\/staff\/\d+\/(password|active)$/.test(path)) {
+    const s = demoStaff.find((x) => x.id === Number(path.split('/')[3]));
+    if (!s) throw new Error('not found');
+    if (path.endsWith('/active')) s.active = !!p.active;
+    return (s.active ? { staff: s, login: s.login, password: 'demo mnop qrst uvwx' } : { staff: s }) as T;
+  }
+  if (path === '/orders/quote' || path === '/orders/create') {
+    // Demo only: store prices, Bahrain delivery free from 14 like the store; nothing is sent to anyone.
+    const en = p.lang === 'en';
+    const lines = ((p.lines as { id: number; qty: number }[]) ?? []).map((l) => ({ row: catalog[l.id - 100], qty: l.qty })).filter((l) => l.row);
+    const extra = ((p.custom as { amount: number }[]) ?? []).reduce((s, c) => s + c.amount, 0);
+    if (!lines.length && !extra) throw new Error(en ? 'The order is empty.' : 'الطلب فاضي.');
+    const goods = Math.round(lines.reduce((s, l) => s + l.row[1] * l.qty, 0) * 1000) / 1000;
+    const sub = Math.round((goods + extra) * 1000) / 1000;
+    const none = !lines.length;
+    const delivery = p.fulfilment === 'pickup' || none ? 0 : p.country === 'BH' ? (goods >= 14 ? 0 : 2) : 4.5;
+    if (path === '/orders/quote') return { subtotal: sub, delivery, total: sub + delivery } as T;
+    if (!String(p.name ?? '').trim()) throw new Error(en ? 'Enter the customer’s name.' : 'اكتب اسم الزبون.');
+    const pickup = !none && p.fulfilment === 'pickup';
+    const saved = !pickup && !none && Number(p.address_from ?? 0) > 0;
+    const bylink = p.method === 'link';
+    const addr = !pickup && !none && !saved;
+    return { id: 990, number: '990', total: sub + delivery, method_label: bylink ? '' : String(p.method), name: String(p.name), whatsapp: String(p.phone).replace(/\D/g, ''), pickup,
+      address_state: pickup || none ? '' : saved ? 'received' : 'awaiting_address', message_state: addr ? (bylink ? 'not_sent' : 'sent') : '', link: addr ? 'https://koubbh.com/address/#' + 'a'.repeat(64) : null, lang: String(p.message_lang ?? 'ar'),
+      pay: bylink ? 'https://koubbh.com/continue/' + 'c'.repeat(64) + '/' : null, paid: !bylink } as T;
+  }
+  if (/^\/orders\/\d+\/address-link$/.test(path)) return { id: 990, number: '990', total: 0, method_label: '', name: '', whatsapp: '', pickup: false, address_state: 'awaiting_address', message_state: 'sent', link: 'https://koubbh.com/address/#' + 'b'.repeat(64), lang: 'ar' } as T;
+  if (/^\/pos\/sale\/\d+\/void$/.test(path)) return posVoid(Number(path.split('/')[3]), p.lang === 'en', p) as T;
+  if (/^\/pos\/sale\/\d+\/refund$/.test(path)) {
+    const s = posSales.find((x) => x.id === Number(path.split('/')[3]));
+    if (!s?.refund || s.refund.state !== 'owed') throw new Error(p.lang === 'en' ? 'No refund is waiting on this sale.' : 'ما في مبلغ لازم يرجع على هالبيع.');
+    const ref = String(p.ref ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (p.state === 'done' && ref.length < 4) throw new Error(p.lang === 'en' ? 'Enter the refund number.' : 'اكتب رقم الاسترجاع.');
+    s.refund = { ...s.refund, state: p.state === 'none' ? 'none' : 'done', ref: p.state === 'done' ? ref : null };
+    return s as T;
+  }
+  if (path === '/loyalty/credit') { demoCredit.on = !!p.on; demoCredit.packs = (p.packs as [number, number][]) ?? demoCredit.packs; return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T; }
+  if (path === '/loyalty/offers') { demoOffers.birthday = !!p.birthday; demoOffers.comeback = !!p.comeback; return { ...demoOffers, birthdays: 12, comeback_days: 90, comeback_pct: 30, comeback_valid_days: 2 } as T; }
+  if (path === '/feedback') {
+    const u = String(p.review_url ?? '').trim();
+    if (u && !/^https:\/\/(www\.)?(g\.page|google\.[a-z.]+|search\.google\.com|maps\.app\.goo\.gl|goo\.gl)\//i.test(u)) throw new Error(p.lang === 'en' ? 'Paste the "Ask for reviews" link from your Google Business Profile.' : 'حط رابط "اطلب تقييمات" من ملفك في Google Business.');
+    demoReviewUrl = u; return feedbackView() as T;
+  }
+  if (path === '/pos/ahead') { Object.assign(demoAhead, { on: !!p.on, from: String(p.from), to: String(p.to), cap: Number(p.cap), lead: Number(p.lead) }); return aheadView() as T; }
+  if (path === '/pos/stock/move') {
+    const x = demoIng[String(p.id)]; if (!x) throw new Error('not found'); const q = Number(p.qty);
+    x.stock = p.why === 'receive' ? x.stock + q : p.why === 'waste' ? x.stock - q : q; return stockView() as T;
+  }
+  if (path === '/pos/stock/ingredient') {
+    const id = String(p.id || String(p.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'ing-' + Object.keys(demoIng).length);
+    demoIng[id] = { stock: demoIng[id]?.stock ?? 0, per_day: demoIng[id]?.per_day ?? 0, name: String(p.name), unit: p.unit as StockUnit, low: Number(p.low) || 0, cost: Number(p.cost) || 0 }; return stockView() as T;
+  }
+  if (path === '/pos/stock/recipe') { const r = (demoRecipes[Number(p.product)] ??= {}); r[String(p.choice ?? '')] = p.items as RecipeItem[]; return stockView() as T; }
+  if (path === '/pos/golive') {
+    if (String(p.confirm) !== 'KOUB') throw new Error(p.lang === 'en' ? 'Type KOUB to confirm.' : 'اكتب KOUB عشان تأكد.');
+    if (p.action === 'training_off') demoTraining = false; else if (p.action === 'training_on') demoTraining = true;
+    else { if (demoTraining) throw new Error('طفّ التدريب أول، وبعدين امسح مبيعات التدريب.'); const n = posSales.length; posSales.length = 0; return { ...posGolive(), deleted: n } as T; }
+    return posGolive() as T;
+  }
+  if (path === '/orders/bulk') { const r = bulk((p.ids as number[]) ?? [], p.action as BulkKey); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (path === '/preorders/release') { const r = releasePreorders(String(p.key), (p.ids as number[]) ?? []); return (p.lang === 'en' ? english(r) : r) as T; }
+  if (/^\/products\/\d+\/stock$/.test(path)) return stockChange(Number(path.split('/')[2]), Number(p.delta), p.lang === 'en') as T;
+  if (/^\/orders\/\d+\/(payment-link|unpaid-dismiss)$/.test(path)) {
+    const [, , id, what] = path.split('/');
+    const i = unpaidRows.findIndex((r) => r.id === Number(id));
+    if (i < 0) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    if (what === 'unpaid-dismiss') { unpaidRows.splice(i, 1); return { ok: true } as T; }
+    const r = unpaidRows[i];
+    if (!r.payable) throw new Error(p.lang === 'en' ? 'This order can no longer be paid from a link.' : 'هالطلب ما عاد ينفع يندفع من رابط.');
+    r.shared = new Date().toISOString();
+    const url = 'https://koubbh.com/continue/demo' + r.id + '/';
+    return { url, text: 'هلا ' + r.name.split(' ')[0] + '، معك KOUB. دفع طلبك #' + r.number + ' ما اكتمل. تقدر تكمل الدفع من هالرابط:\n' + url, whatsapp: r.whatsapp } as T;
+  }
+  if (/^\/orders\/\d+\/contact$/.test(path)) {
+    const o = orders.find((x) => x.id === Number(path.split('/')[2]));
+    if (!o) throw new Error(p.lang === 'en' ? 'Order not found' : 'الطلب مو موجود');
+    editContact(o, p, p.lang === 'en');
+    return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+  }
   const [, , id, what] = path.split('/');
   const o = orders.find((x) => x.id === Number(id));
   if (!o || (what !== 'action' && what !== 'note')) throw new Error(p.lang === 'en' ? 'Not available in demo mode.' : 'مو متاح في وضع التجربة.');
   o.notes ??= [];
   if (what === 'note') o.notes.push(String(p.note ?? '').trim().slice(0, 500));
-  else {
-    const key = p.action as ActionKey;
-    if (!actions(o).some((a) => a.key === key)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
-    if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
-    if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
-    if (key === 'cod_collected') o.collected = true;
-    if (key === 'cancel') { o.cancelled = true; o.next = null; }
-    o.notes.push('KOUB: ' + key + ' (demo)');
-  }
+  else if (!apply(o, p.action as ActionKey)) throw new Error(p.lang === 'en' ? 'This step isn’t available for this order.' : 'هالخطوة مو متاحة لهالطلب.');
   return demo<T>('/orders/' + o.id, { lang: p.lang as string | undefined });
+}
+
+function apply(o: DemoOrder, key: ActionKey): boolean {
+  if (!actions(o).some((a) => a.key === key)) return false;
+  const done = ['طلع للتوصيل', 'جاهز للاستلام'];
+  if (key === 'out_delivery' || key === 'ready_pickup') { o.fulfilled = true; o.next = null; o.tags = [...o.tags, { label: labels[key], tone: 'green' }]; }
+  if (key === 'undo_fulfilment') { o.fulfilled = false; if (o.kind === 'done') o.kind = 'prepare_bh'; o.next = o.kind === 'pickup' ? 'ready_pickup' : 'out_delivery'; o.tags = o.tags.filter((t) => !done.includes(t.label)); }
+  if (key === 'release_preorder') { o.released = true; o.next = 'out_delivery'; o.tags = o.tags.filter((t) => t.label !== 'طلب مسبق'); }
+  if (key === 'cod_collected') o.collected = true;
+  if (key === 'undo_cod') o.collected = false;
+  if (key === 'cancel') { o.cancelled = true; o.next = null; }
+  (o.notes ??= []).push('KOUB: ' + key + ' (demo)');
+  return true;
+}
+
+// The same rules as the store's bulk bar: cash only for orders already handed over; every skip has a reason.
+function bulk(ids: number[], key: BulkKey): BulkResult {
+  const out: BulkResult = { action: key, updated: 0, skipped: [] };
+  for (const id of [...new Set(ids)].slice(0, 20)) {
+    const o = orders.find((x) => x.id === id);
+    if (!o) continue;
+    const ok = apply(o, key);
+    if (ok) out.updated += 1;
+    else out.skipped.push({ id, number: o.number, reason: key === 'cod_collected' && !o.collected && !handedOver(o) ? 'ما تسلّم للحين. أكد الكاش من صفحة الطلب.' : key === 'out_delivery' && o.kind === 'pickup' ? 'طلب استلام، اضغط «جاهز للاستلام».' : 'هالخطوة مو متاحة لهالطلب.' });
+  }
+  return out;
+}
+// A plain demo slip; the real one comes from the store's dashboard template.
+function slipsHtml(ids: number[]): string {
+  const sheets = ids.map((id) => orders.find((o) => o.id === id)).filter(Boolean).map((o) => '<section class="sheet"><h1>KOUB</h1><h2>#' + o!.number + '</h2><p>' + o!.name + '</p><p>' + o!.items + '</p><p><b>' + o!.total.toFixed(3) + ' BHD</b></p><p class="demo">بيانات تجريبية · Demo data</p></section>').join('');
+  return '<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px Arial,sans-serif}.sheet{padding:24px;border-bottom:1px dashed #999;break-after:page}.demo{color:#a60}</style></head><body>' + sheets + '</body></html>';
+}
+function bulkChoices(view: string, prepare: string): BulkAction[] {
+  // Every step; the app shows the ones the ticked rows allow. Cancel only on All, like the dashboard.
+  const keys: BulkKey[] = ['out_delivery', 'ready_pickup', 'release_preorder', 'cod_collected'];
+  if (view === 'all') keys.push('cancel');
+  return keys.map((k) => ({ key: k, label: k === 'cancel' ? 'إلغاء الطلبات' : labels[k], confirm: k === 'cancel' ? 'تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟' : k === 'cod_collected' ? 'تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟' : k === 'release_preorder' ? 'كل المنتجات موجودة للتحضير؟ ما بينرسل للعميل رسالة.' : 'تحدّث {n} طلبات محددة إلى «' + labels[k] + '»؟ العملاء المؤهلين يوصلهم واتساب.', tone: k === 'cancel' ? 'danger' : 'primary' }));
+}
+
+// Pre-orders by item, the store's rules: an order waiting for one item only can be released from that item.
+const preKeys = (o: DemoOrder) => [...new Set(o.lines.filter(([i]) => i === 5 || i === 7).map(([i]) => 'p' + (100 + i)))];
+function preorderGroups(): PreorderGroup[] {
+  const open = orders.filter((o) => o.kind === 'preorder' && !o.released && !o.cancelled);
+  const keys = [...new Set(open.flatMap(preKeys))];
+  return keys.map((key) => {
+    const i = Number(key.slice(1)) - 100;
+    const mine = open.filter((o) => preKeys(o).includes(key));
+    const ready = mine.filter((o) => preKeys(o).length === 1).map((o) => o.id);
+    const qty = mine.reduce((sum, o) => sum + o.lines.filter(([x]) => x === i).reduce((a, [, q]) => a + q, 0), 0);
+    const oldest = mine.reduce((a, o) => (o.created && (!a || o.created < a) ? o.created : a), null as string | null);
+    return { key, name: catalog[i][0], orders: mine.length, qty, ready: ready.length, ready_ids: ready, mixed: mine.length - ready.length, oldest, ago: mine.find((o) => o.created === oldest)?.ago ?? '', stock: catalog[i][3], product_id: 100 + i, image: null, confirm: 'وصل مخزون ' + catalog[i][0] + '؟ ' + ready.length + ' طلب ينتقل للتحضير. ما ينرسل شي للعملاء.' };
+  }).sort((a, b) => b.orders - a.orders);
+}
+function releasePreorders(key: string, ids: number[]): ReleaseResult {
+  const ready = preorderGroups().find((g) => g.key === key)?.ready_ids ?? [];
+  const out: ReleaseResult = { updated: 0, skipped: [] };
+  for (const id of ids) {
+    const o = orders.find((x) => x.id === id);
+    if (o && ready.includes(id) && apply(o, 'release_preorder')) out.updated += 1;
+    else out.skipped.push({ id, number: String(id), reason: o && !o.released ? 'ينتظر منتج ثاني كمان. جهّزه من صفحة الطلب.' : 'ما عاد ينتظر.' });
+  }
+  return out;
+}
+function stockChange(id: number, delta: number, en: boolean): StockResult {
+  const row = catalog[id - 100];
+  if (!row || row[3] === null) throw new Error(en ? 'Use the product screen for this product.' : 'عدّل هالمنتج من صفحته.');
+  if (row[3] + delta < 0) throw new Error(en ? 'Only ' + row[3] + ' in stock.' : 'المخزون ' + row[3] + ' بس.');
+  row[3] += delta;
+  const stock = row[3];
+  return { qty: stock, revision: 'demo-' + id + '-' + stock, state: stock === 0 ? 'out' : stock <= 2 ? 'low' : 'ok' };
 }
 
 function products(filter: string, s: string): ProductList {
   const all: Product[] = catalog.map(([name, price, cost, stock], i) => {
     const state = i === 5 ? 'ok' : stock === 0 ? 'out' : stock !== null && stock <= 2 ? 'low' : 'ok';
-    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null };
+    return { id: 100 + i, name, sku: 'KB-' + (100 + i), price, cost, profit: cost === null ? null : Math.round((price - cost) * 1000) / 1000, state, preorder: i === 5, stock, waiting_alerts: state === 'out' ? 3 + i : 0, image: null, quick: stock !== null, revision: 'demo-' + (100 + i) + '-' + stock };
   });
   const keys = (p: Product) => ['all', p.state === 'draft' ? 'draft' : p.preorder ? 'preorder' : p.state === 'low' || p.state === 'out' ? p.state : ''];
   const c = { all: 0, low: 0, out: 0, preorder: 0, draft: 0 } as ProductList['counts'];
@@ -223,6 +690,12 @@ const EN: [string | RegExp, string][] = [
   [/^تأكد إن KOUB استلم كامل مبلغ الكاش من طلب #(\d+)؟$/, 'Confirm KOUB received the full cash amount for order #$1?'],
   [/^تلغي طلب #(\d+) بدون ما ترجع المبلغ؟ الاسترجاع يكون من صفحة الطلب\.$/, 'Cancel order #$1 WITHOUT refunding the payment? Refunds are done from the order screen.'],
   [/^تلغي طلب #(\d+)؟ ما في مبلغ مدفوع\.$/, 'Cancel order #$1? No payment was taken.'],
+  [/^ترجّع طلب #(\d+) للتحضير؟ لو انرسل واتساب للعميل، ما ينسحب\.$/, 'Move order #$1 back to To prepare? A WhatsApp update already sent to the customer is not recalled.'],
+  [/^تسجّل إن كاش طلب #(\d+) ما انحصل للحين؟$/, 'Mark the cash for order #$1 as not received yet?'],
+  [/^تحدّث \{n\} طلبات محددة إلى «(.+)»؟ العملاء المؤهلين يوصلهم واتساب\.$/, 'Update {n} selected orders to “$1”? Eligible customers get a WhatsApp update.'],
+  ['تأكد إن KOUB استلم كامل مبلغ الكاش من {n} طلبات محددة؟', 'Confirm KOUB received the full cash amount for {n} selected orders?'], ['تلغي {n} طلبات محددة بدون ما ترجع المبلغ؟', 'Cancel {n} selected orders WITHOUT refunding the payment?'],
+  ['ما تسلّم للحين. أكد الكاش من صفحة الطلب.', 'not handed over yet. Confirm its cash from the order screen.'], ['هالخطوة مو متاحة لهالطلب.', 'this step isn’t available for this order.'],
+  ['طلب استلام، اضغط «جاهز للاستلام».', 'pickup order. Use “Ready for pickup”.'], ['تراجع عن «', 'Undo “'], ['إلغاء الطلبات', 'Cancel orders'],
   ['كاش عند التوصيل · ما انحصل للحين', 'Cash on delivery · not collected yet'], ['هدية · تنتظر العنوان', 'Gift · address needed'], ['السعودية · شحن', 'Saudi Arabia · Shipping'],
   ['دعوة المستلم يضيف عنوانه', 'Gift address invitation'], ['ينتظر عنوان مستلم الهدية.', 'Waiting for the gift recipient’s address.'], ['ينتظر منتج الطلب المسبق.', 'Waiting for the pre-order product.'],
   ['خلص. طلع للتوصيل.', 'Done. Out for delivery.'], ['لو سمحت التوصيل بعد الساعة 6', 'Please deliver after 6'], ['كل عام وأنتِ بخير', 'Happy birthday'],
@@ -238,7 +711,7 @@ const EN: [string | RegExp, string][] = [
   ['سارة م.', 'Sara M.'], ['خالد ع.', 'Khalid A.'], ['نورة ي.', 'Noora Y.'], ['أحمد س.', 'Ahmed S.'], ['ريم ح.', 'Reem H.'], ['يوسف ب.', 'Yusuf B.'], ['دانة ف.', 'Dana F.'],
   ['عبدالله ر.', 'Abdulla R.'], ['مريم ك.', 'Maryam K.'], ['حمد ج.', 'Hamad J.'], ['فاطمة ن.', 'Fatima N.'], ['علي ط.', 'Ali T.'], ['لولوة', 'Lulwa'], ['مساحة KOUB', 'KOUB workspace'],
   ['يناير', 'January'], ['فبراير', 'February'], ['مارس', 'March'], ['أبريل', 'April'], ['مايو', 'May'], ['يونيو', 'June'], ['يوليو', 'July'], ['أغسطس', 'August'], ['سبتمبر', 'September'], ['أكتوبر', 'October'], ['نوفمبر', 'November'], ['ديسمبر', 'December'],
-  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '],
+  [/^قبل (\d+) د$/, '$1 min ago'], [/^قبل ساعة$/, '1h ago'], [/^قبل ساعتين$/, '2h ago'], [/^قبل (\d+) ساعات$/, '$1h ago'], [/^قبل (\d+) أيام$/, '$1 days ago'], [/^أمس$/, 'Yesterday'], ['، ', ', '], ['»', '”'], ['«', '“'],
 ];
 function english<T>(v: T): T {
   if (typeof v === 'string') {
@@ -269,16 +742,37 @@ export async function demo<T>(path: string, p: Record<string, string | number | 
 
 async function demoAr<T>(path: string, p: Record<string, string | number | undefined>): Promise<T> {
   await new Promise((r) => setTimeout(r, 350));
-  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true };
+  const me: Me = { api: 'demo', name: 'KOUB', initial: 'K', lang: 'ar', dir: 'rtl', currency: 'BHD', site: 'KOUB', whatsapp_automation: true, role: demoRole() };
   if (path === '/me') return me as T;
   if (path === '/home') return home(String(p.period ?? 'today')) as T;
   if (path === '/numbers') return numbers(String(p.period ?? 'today')) as T;
   if (path === '/products') return products(String(p.filter ?? 'all'), String(p.s ?? '')) as T;
+  if (path === '/preorders') return { groups: preorderGroups() } as T;
+  if (path === '/run') return run() as T;
+  if (path === '/unpaid') return unpaidList() as T;
+  if (path === '/pos/catalog') return posCatalog(false) as T;
+  if (path === '/pos/today') return posToday() as T;
+  if (path === '/pos/close') return posClose() as T;
+  if (path === '/pos/golive') return posGolive() as T;
+  if (path === '/pos/stock') return stockView() as T;
+  if (path === '/loyalty/credit') return { ...demoCredit, outstanding: 146.5, cards: 18, month_paid: 210, month_credit: 236 } as T;
+  if (path === '/loyalty/offers') return { ...demoOffers, birthdays: 12, comeback_days: 90, comeback_pct: 30, comeback_valid_days: 2 } as T;
+  if (path === '/pos/ahead') return aheadView() as T;
+  if (path === '/feedback') return feedbackView() as T;
+  if (path === '/pos/insights') return insights(String(p.period ?? '7days')) as T;
+  if (path === '/pos/books') return posBooks(String(p.period ?? 'today'), false) as T;
+  if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
+  if (path === '/bar/pickup') return { orders: demoPickups.map((x) => ({ ...x })) } as T;
+  if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
+  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 5, need: 2, rewards: 1, credit: demoCredit.on ? 6.6 : null, offer: { pct: 30, why: 'comeback', until: new Date(Date.now() + 2 * 864e5).toISOString() } } as T;
+  if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
+  if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
+  if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
   if (path.startsWith('/orders/')) return order(Number(path.split('/')[2])) as T;
   if (path === '/orders') {
     const view = String(p.view ?? 'active'), prepare = String(p.prepare ?? 'all'), q = String(p.s ?? '');
     const rows = orders.filter((o) => inView(o, view, prepare) && (!q || o.number.includes(q) || o.name.includes(q)));
-    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip) } as T;
+    return { view, prepare, total: rows.length, page: 1, pages: 1, counts: counts(), orders: rows.map(strip), bulk: bulkChoices(view, prepare), print: view === 'all' || (view === 'active' && prepare !== 'pickup') } as T;
   }
   throw new Error('Unknown demo route ' + path);
 }
