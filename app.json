@@ -13,7 +13,8 @@
         "NSFaceIDUsageDescription": "KOUB uses Face ID to unlock your workspace.",
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
