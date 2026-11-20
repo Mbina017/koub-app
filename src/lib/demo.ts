@@ -249,7 +249,7 @@ function posCatalog(en: boolean): PosCatalog {
       ...catalog.map(([name, price, , stock], i) => ({ id: 100 + i, name, group: 'products' as const, shelf: 'goods' as const, temp: null, sku: 'KB-' + (100 + i), price, stock, image: null })).filter((p, i) => i !== 4),
     ],
     methods: ((demoCredit.on ? ['card', 'benefit', 'credit'] : ['card', 'benefit']) as PosMethod[]).map((key) => ({ key, label: methodLabel(key, en) })),
-    loyalty: { stamps: 4, max_per_sale: 4 },
+    loyalty: { stamps: 5, max_per_sale: 5 },
     training: true,
     benefit_qr: '{"iban":"BH00DEMO0000000000000"}',
     top: [700, 703, 704, 701, 706, 708],
@@ -757,7 +757,7 @@ async function demoAr<T>(path: string, p: Record<string, string | number | undef
   if (path === '/customer') return (String(p.phone ?? '').replace(/\D/g, '').endsWith('33001122') ? { found: true, phone: '97333001122', name: 'أم أحمد', orders: 4, address: { from: 1031, country: 'BH', text: 'House 12, Road 45, Block 905 · Riffa' } } : { found: false }) as T;
   if (path === '/bar/pickup') return { orders: demoPickups.map((x) => ({ ...x })) } as T;
   if (path === '/bar') return { tickets: demoBar, waiting: demoBar.filter((x) => x.state === 'waiting').length } as T;
-  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 4, need: 1, rewards: 1, credit: demoCredit.on ? 6.6 : null } as T;
+  if (path === '/loyalty/card') return { id: 1, code: 'ABCD-2345', name: 'مريم', stamps: 3, of: 5, need: 2, rewards: 1, credit: demoCredit.on ? 6.6 : null } as T;
   if (path === '/pos/staff') return { pin_set: demoPin, staff: demoStaff } as T;
   if (path === '/pos/staff-report') return staffReport(String(p.period ?? 'today')) as T;
   if (path === '/orders/slips') return { count: 1, html: slipsHtml(String(p.ids ?? '').split(',').map(Number)) } as T;
