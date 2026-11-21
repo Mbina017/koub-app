@@ -4,7 +4,7 @@
 // Prices and stock come from the store; the sale is saved there as a completed order (API 1.5).
 // Each checkout carries its own reference, so pressing again after a network drop never sells twice.
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,7 +19,7 @@ import type { LoyaltyCard, PosChoice, PayRefMode, PosMethod, PosProduct, PosRece
 import { PosOptions, type PosPick } from '../components/PosOptions';
 import { LoyaltyScan } from '../components/LoyaltyScan';
 import { QrCode } from '../components/QrCode';
-import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, Touch, Txt } from '../components/ui';
+import { Button, Empty, ErrorState, Muted, Row, Segmented, Skeleton, tap, Touch, Txt } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { StaffMenu } from '../components/Staff';
 
@@ -371,10 +371,24 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
   const close = () => { if (sale.isPending) return; if (done) reset(); onClose(); };
   const quick = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4);
   const input = [st.input, { textAlign: (lang === 'ar' ? 'right' : 'left') as 'right' | 'left', fontFamily: font.regular }];
+  const iosCheckout = Platform.OS === 'ios';
+  const checkoutFooter = (
+    <View style={[st.bar, st.checkoutFooter, iosCheckout && st.checkoutFooterIos, { paddingBottom: insets.bottom + space.md }]}>
+      {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
+      {offerOff > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyOfferLine', { n: offerPct })}</Muted><Muted>{'−' + money(offerOff, lang)}</Muted></Row>}
+      {discount > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('posDiscount')}</Muted><Muted>{'−' + money(discount, lang)}</Muted></Row>}
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
+        <Txt size={22} weight="bold">{money(total, lang)}</Txt>
+      </Row>
+      <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing || joinMissing} onPress={() => sale.mutate()} />
+      {joinMissing && <Muted size={12} tint={color.amber} center>{t('loyJoinWrong')}</Muted>}
+    </View>
+  );
 
   return (
     <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: color.bg }}>
+      <View style={st.checkoutSheet}>
         <Row style={[st.top, { paddingTop: Platform.OS === 'ios' ? space.md : insets.top + 6 }]}>
           <Txt size={19} weight="bold" style={{ flex: 1, paddingHorizontal: space.sm }}>{done ? t('posSold', { n: done.number }) : t('posCheckout')}</Txt>
           <Touch onPress={close} style={st.iconBtn} accessibilityLabel={t('posExit')}><Icon name="close" size={22} /></Touch>
@@ -406,7 +420,9 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
           </ScrollView>
         ) : (
           <>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: space.xl }}>
+            {/* On iOS the totals scroll with the fields; the native keyboard inset keeps both reachable. */}
+            <ScrollView style={st.checkoutScroll} contentContainerStyle={[st.checkoutFields, iosCheckout && st.checkoutScrollContent]}
+              automaticallyAdjustKeyboardInsets={iosCheckout} keyboardDismissMode={iosCheckout ? 'interactive' : 'none'} keyboardShouldPersistTaps="handled">
               <View style={st.card}>
                 <OrderLines lines={lines} setLineQty={setLineQty} />
                 {!lines.length && <Muted center style={{ paddingVertical: space.md }}>{t('posEmpty')}</Muted>}
@@ -437,14 +453,18 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                     <Touch onPress={() => { setCard(null); setUseFree(false); setUseOffer(true); }} style={st.iconBtn} accessibilityLabel={t('loyRemove')}><Icon name="close" size={18} /></Touch>
                   </Row>
                   {!!card.card.offer && (
-                    <Touch onPress={() => setUseOffer(!useOffer)} style={[st.pill, { alignSelf: 'flex-start' }, useOffer && { backgroundColor: color.ink }]}>
+                    <Pressable accessibilityRole="button" accessibilityState={{ selected: useOffer }}
+                      onPress={() => { tap(); setUseOffer(!useOffer); }}
+                      style={({ pressed }) => [st.pill, st.checkoutLoyaltyPill, useOffer && st.checkoutLoyaltyPillOn, pressed && st.checkoutLoyaltyPillPressed]}>
                       <Txt size={13} weight="semibold" tint={useOffer ? color.bg : color.ink}>{(useOffer ? '✓ ' : '') + t('loyUseOffer', { n: card.card.offer.pct })}</Txt>
-                    </Touch>
+                    </Pressable>
                   )}
                   {card.card.rewards > 0 && (
-                    <Touch onPress={() => (drinkPrices.length ? setUseFree(!useFree) : showMessage(t('loyCard'), t('loyNeedDrink')))} style={[st.pill, { alignSelf: 'flex-start' }, useFree && { backgroundColor: color.ink }]}>
+                    <Pressable accessibilityRole="button" accessibilityState={{ selected: useFree }}
+                      onPress={() => { tap(); if (drinkPrices.length) setUseFree(!useFree); else showMessage(t('loyCard'), t('loyNeedDrink')); }}
+                      style={({ pressed }) => [st.pill, st.checkoutLoyaltyPill, useFree && st.checkoutLoyaltyPillOn, pressed && st.checkoutLoyaltyPillPressed]}>
                       <Txt size={13} weight="semibold" tint={useFree ? color.bg : color.ink}>{(useFree ? '✓ ' : '') + t('loyUseFree')}</Txt>
-                    </Touch>
+                    </Pressable>
                   )}
                 </View>
               ) : (
@@ -513,27 +533,27 @@ function Checkout({ open, lines, subtotal, methods, benefitQr, payRefMode, loyal
                 <Touch onPress={() => setWho(true)} style={{ paddingVertical: 6 }}><Muted>{'+ ' + t('posAddCustomer')}</Muted></Touch>
               ))}
               </>)}
+              {iosCheckout && checkoutFooter}
             </ScrollView>
-            <View style={[st.bar, { position: 'relative', paddingBottom: insets.bottom + space.md, gap: 6 }]}>
-              {free > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyFreeLine')}</Muted><Muted>{'−' + money(free, lang)}</Muted></Row>}
-              {offerOff > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('loyOfferLine', { n: offerPct })}</Muted><Muted>{'−' + money(offerOff, lang)}</Muted></Row>}
-              {discount > 0 && <Row style={{ justifyContent: 'space-between' }}><Muted>{t('posDiscount')}</Muted><Muted>{'−' + money(discount, lang)}</Muted></Row>}
-              <Row style={{ justifyContent: 'space-between' }}>
-                <Txt size={16} weight="semibold">{t('posTotal')}</Txt>
-                <Txt size={22} weight="bold">{money(total, lang)}</Txt>
-              </Row>
-              <Button label={t('posComplete')} icon="check" loading={sale.isPending} disabled={!lines.length || short || creditShort || sale.isPending || whereMissing || joinMissing} onPress={() => sale.mutate()} />
-              {joinMissing && <Muted size={12} tint={color.amber} center>{t('loyJoinWrong')}</Muted>}
-            </View>
+            {!iosCheckout && checkoutFooter}
           </>
         )}
-      </KeyboardAvoidingView>
+      </View>
       <LoyaltyScan open={scan} onClose={() => setScan(false)} onCard={(c, code) => { setCard({ card: c, code }); setUseFree(false); setScan(false); }} />
     </Modal>
   );
 }
 
 const st = StyleSheet.create({
+  checkoutSheet: { flex: 1, backgroundColor: color.bg },
+  checkoutScroll: { flex: 1, minHeight: 0 },
+  checkoutScrollContent: { flexGrow: 1 },
+  checkoutFields: { padding: space.lg, gap: space.md, paddingBottom: space.xl },
+  checkoutFooter: { position: 'relative', flexShrink: 0, gap: 6 },
+  checkoutFooterIos: { marginTop: 'auto', marginHorizontal: -space.lg, marginBottom: -space.xl },
+  checkoutLoyaltyPill: { alignSelf: 'flex-start', width: '100%', maxWidth: 320, minWidth: 0 },
+  checkoutLoyaltyPillOn: { backgroundColor: color.ink },
+  checkoutLoyaltyPillPressed: { opacity: 0.78 },
   top: { paddingHorizontal: space.md, paddingBottom: space.sm, gap: 4, backgroundColor: color.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: color.sunken },
