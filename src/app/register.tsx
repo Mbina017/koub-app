@@ -2,9 +2,10 @@
 // once approved, the staff member signs in on the login screen with the same username and password.
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ApiError, normalizeSite, staffSignUp } from '../lib/api';
+import { ApiError, staffSignUp } from '../lib/api';
+import { KOUB_AUTH_ORIGIN } from '../lib/app-environment';
 import { useSession } from '../lib/session';
 import { color, font, radius, space } from '../lib/theme';
 import { Button, Muted, Row, Touch, Txt } from '../components/ui';
@@ -13,8 +14,6 @@ import { Icon } from '../components/Icon';
 export default function Register() {
   const { t, lang } = useSession();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ site?: string }>();
-  const [site] = useState(params.site || 'koubbh.com');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [user, setUser] = useState('');
@@ -31,7 +30,7 @@ export default function Register() {
     if (pass !== pass2) return setError(t('regPassMatch'));
     setError(''); setBusy(true);
     try {
-      await staffSignUp(normalizeSite(site), { name: name.trim(), phone: phone.trim(), username: user.trim().toLowerCase(), password: pass });
+      await staffSignUp(KOUB_AUTH_ORIGIN, { name: name.trim(), phone: phone.trim(), username: user.trim().toLowerCase(), password: pass });
       setSent(true);
     } catch (e) {
       setError(e instanceof ApiError && e.kind === 'refused' ? e.message : e instanceof ApiError && e.kind === 'not_found' ? t('errNotFound') : t('errNetwork'));
