@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { focusManager, useQueryClient } from '@tanstack/react-query';
 import { IBMPlexSansArabic_400Regular } from '@expo-google-fonts/ibm-plex-sans-arabic/400Regular';
 import { IBMPlexSansArabic_500Medium } from '@expo-google-fonts/ibm-plex-sans-arabic/500Medium';
 import { IBMPlexSansArabic_600SemiBold } from '@expo-google-fonts/ibm-plex-sans-arabic/600SemiBold';
@@ -19,12 +19,6 @@ import { LockScreen } from '../components/LockScreen';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const client = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000, retry: (n, e: unknown) => n < 2 && (e as { kind?: string })?.kind === 'network' },
-  },
-});
-
 // Refetch when the app comes back to the foreground, like a native app should.
 if (Platform.OS !== 'web') {
   AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'));
@@ -32,6 +26,7 @@ if (Platform.OS !== 'web') {
 
 // A tapped alert opens what it is about; any alert refreshes the lists.
 function useAlerts(signedIn: boolean) {
+  const client = useQueryClient();
   const last = useLastAlertTap();
   const handled = useRef<string | null>(null);
   useEffect(() => {
@@ -48,7 +43,7 @@ function useAlerts(signedIn: boolean) {
       for (const k of ['home', 'orders', 'unpaid', 'preorders', 'products', 'bar']) client.invalidateQueries({ queryKey: [k] });
     });
     return () => sub.remove();
-  }, []);
+  }, [client]);
 }
 
 function Gate() {
@@ -128,12 +123,10 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError && !late) return null;
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={client}>
-        <SessionProvider>
-          <StatusBar style="dark" />
-          <Gate />
-        </SessionProvider>
-      </QueryClientProvider>
+      <SessionProvider>
+        <StatusBar style="dark" />
+        <Gate />
+      </SessionProvider>
     </SafeAreaProvider>
   );
 }
